@@ -90,7 +90,7 @@ app.get('/summaryreport', cors(corsOptions), (req, res) => {
   SELECT Count(distinct locationname) as LocationName,
   sum(s.scanimages) as 'Scanned',sum(qcimages) as 'QC',
   sum(flaggingimages)  as 'Flagging',sum(indeximages) as 'Indexing',
-  sum(cbslqaimages) as 'CBSL_QA',sum(clientqaacceptimages)  as 'Client-QA' FROM scanned s
+  sum(cbslqaimages) as 'CBSL_QA',sum(clientqaacceptimages)  as 'Client_QC' FROM scanned s
   ${whereClause}
   ${dateClause}
   ;`;
@@ -146,12 +146,12 @@ app.get('/detailedreport', cors(corsOptions), (req, res) => {
   const query = `
   SELECT 
     s.locationname,
-    SUM(s.scanimages) AS 'Total Scanned',
-    SUM(s.qcimages) AS 'Total QC',
-    SUM(s.indeximages) AS 'Total Index',
-    SUM(s.flaggingimages) AS 'Total Flagging',
-    SUM(s.cbslqaimages) AS 'Total cbslqa',
-    SUM(s.clientqaacceptimages) AS 'Total ClientQA'
+    SUM(s.scanimages) AS 'Scanned',
+    SUM(s.qcimages) AS 'QC',
+    SUM(s.indeximages) AS 'Indexing',
+    SUM(s.flaggingimages) AS 'Flagging',
+    SUM(s.cbslqaimages) AS 'CBSL_QA',
+    SUM(s.clientqaacceptimages) AS 'Client_QC'
   FROM 
     scanned s
   ${whereClause}
@@ -319,12 +319,12 @@ app.get("/detailedreportlocationwise", cors(corsOptions), (req, res) => {
       ), 
       ', ', 1
     ) AS user_type,
-    SUM(s.scanimages) AS 'Total Scanned',
-    SUM(s.qcimages) AS 'Total QC',
-    SUM(s.indeximages) AS 'Total Index',
-    SUM(s.flaggingimages) AS 'Total Flagging',
-    SUM(s.cbslqaimages) AS 'Total cbslqa',
-    SUM(s.clientqaacceptimages) AS 'Total ClientQA'
+    SUM(s.scanimages) AS 'Scanned',
+    SUM(s.qcimages) AS 'QC',
+    SUM(s.indeximages) AS 'Indexing',
+    SUM(s.flaggingimages) AS 'Flagging',
+    SUM(s.cbslqaimages) AS 'CBSL_QA',
+    SUM(s.clientqaacceptimages) AS 'Client_QC'
   FROM 
     scanned s
   ${whereClause}
@@ -510,12 +510,12 @@ SELECT
     s.lotno AS 'LotNo',
     s.casetypecode AS 'FileBarcode',
     DATE_FORMAT(s.inventorydate, '%Y-%m-%d') AS 'Date',
-    case when sum(s.scanimages) is null then '0' else sum(s.scanimages) end as 'Total Scanned',
-    case when sum(s.qcimages) is null then '0' else sum(s.qcimages) end as 'Total QC',
-    case when sum(s.indeximages) is null then '0' else sum(s.indeximages) end as 'Total Index',
-    case when sum(s.flaggingimages) is null then '0' else sum(s.flaggingimages) end as 'Total Flagging',
-    case when sum(s.cbslqaimages) is null then '0' else sum(s.cbslqaimages) end as 'Total cbslqa',
-    case when sum(s.clientqaacceptimages) is null then '0' else sum(s.clientqaacceptimages) end as 'Total ClientQA'
+    case when sum(s.scanimages) is null then '0' else sum(s.scanimages) end as 'Scanned',
+    case when sum(s.qcimages) is null then '0' else sum(s.qcimages) end as 'QC',
+    case when sum(s.indeximages) is null then '0' else sum(s.indeximages) end as 'Indexing',
+    case when sum(s.flaggingimages) is null then '0' else sum(s.flaggingimages) end as 'Flagging',
+    case when sum(s.cbslqaimages) is null then '0' else sum(s.cbslqaimages) end as 'CBSL_QA',
+    case when sum(s.clientqaacceptimages) is null then '0' else sum(s.clientqaacceptimages) end as 'Client_QC'
 FROM 
     scanned s
 ${whereClause}  /* Include WHERE clause here */
@@ -578,8 +578,8 @@ mysql22.query(getCsv, (error, result) => {
 });
 
 
-app.get('/UserDetailedReport/:username', cors(corsOptions), (req, res) => {
-  let username = req.params.username;
+app.get('/UserDetailedReport', cors(corsOptions), (req, res) => {
+  let username = req.query.username;
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
@@ -625,16 +625,16 @@ app.get('/UserDetailedReport/:username', cors(corsOptions), (req, res) => {
         COALESCE(s.cbslqauser, ''),
         COALESCE(s.clientqaacceptuser, '')
     ) AS user_type,
-    s.locationname AS 'Location Name',
+    s.locationname AS 'LocationName',
     s.lotno AS 'LotNo',
     s.casetypecode AS 'FileBarcode',
     s.inventorydate AS 'Date',
-    SUM(s.scanimages) AS 'Total Scanned',
-    SUM(s.qcimages) AS 'Total QC',
-    SUM(s.indeximages) AS 'Total Index',
-    SUM(s.flaggingimages) AS 'Total Flagging',
-    SUM(s.cbslqaimages) AS 'Total cbslqa',
-    SUM(s.clientqaacceptimages) AS 'Total ClientQA'
+    SUM(s.scanimages) AS 'Scanned',
+    SUM(s.qcimages) AS 'QC',
+    SUM(s.indeximages) AS 'Indexing',
+    SUM(s.flaggingimages) AS 'Flagging',
+    SUM(s.cbslqaimages) AS 'CBSL_QA',
+    SUM(s.clientqaacceptimages) AS 'Client_QC'
 FROM 
     scanned s
 ${whereClause}  /* Include WHERE clause here */
