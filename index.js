@@ -319,6 +319,7 @@ app.get("/detailedreportlocationwise", cors(corsOptions), (req, res) => {
       ), 
       ', ', 1
     ) AS user_type,
+    s.locationname AS 'locationName',
     SUM(s.scanimages) AS 'Scanned',
     SUM(s.qcimages) AS 'QC',
     SUM(s.indeximages) AS 'Indexing',
@@ -330,6 +331,7 @@ app.get("/detailedreportlocationwise", cors(corsOptions), (req, res) => {
   ${whereClause}
   ${dateClause}
   GROUP BY 
+  s.locationname,
     user_type;
 `;
 
@@ -625,7 +627,7 @@ app.get('/UserDetailedReport', cors(corsOptions), (req, res) => {
         COALESCE(s.cbslqauser, ''),
         COALESCE(s.clientqaacceptuser, '')
     ) AS user_type,
-    s.locationname AS 'LocationName',
+    s.locationname AS 'locationName',
     s.lotno AS 'LotNo',
     s.casetypecode AS 'FileBarcode',
     s.inventorydate AS 'Date',
@@ -655,6 +657,7 @@ GROUP BY
     s.casetypecode,
     s.inventorydate;
 `;
+
 
 
 
