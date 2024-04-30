@@ -16,16 +16,11 @@ const mysql22 = mysql.createConnection({
 });
 const misdb = mysql.createConnection({
   host: "localhost",
-  port: "3307",
+  port: "3306",
   user: "root",
   password: "root",
-  database: "updc_live",
+  database: "updc_misdb",
 });
-
-var corsOptions = {
-  origin: "http://localhost:3000",
-  optionsSuccessStatus: 200,
-}
 
 mysql22.connect((err) => {
   if (err) {
@@ -38,28 +33,19 @@ mysql22.connect((err) => {
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
-app.options("/users", cors(corsOptions), (req, res) => {
+app.options("/users", (req, res) => {
   res.sendStatus(200);
 });
 
-app.get("/usermaster", cors(corsOptions), (req, res) => {
-    mysql22.query(
-      "SELECT user_id, first_name,last_name,designation FROM tbl_user_master where designation in ('project manager', 'site manager', 'site incharge','project head');",
-      (err, results) => {
-        if (err) throw err;
-        res.json(results);
-      }
-    );
-  });
 
-app.get('/locations', cors(corsOptions), (req, res) => {
+app.get('/locations', (req, res) => {
     mysql22.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
       if (err) throw err;
       res.json(results);
     });
   });
 
-app.get('/summaryreport', cors(corsOptions), (req, res) => {
+app.get('/summaryreport',  (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
@@ -96,10 +82,10 @@ app.get('/summaryreport', cors(corsOptions), (req, res) => {
   }
 
   const query = `
-  SELECT Count(distinct locationname) as LocationName,
+  SELECT 
   sum(s.scanimages) as 'Scanned',sum(qcimages) as 'QC',
-  sum(flaggingimages)  as 'Flagging',sum(indeximages) as 'Indexing',
-  sum(cbslqaimages) as 'CBSL_QA',sum(clientqaacceptimages)  as 'Client-QA' FROM scanned s
+  sum(indeximages) as 'Indexing',sum(flaggingimages)  as 'Flagging',
+  sum(cbslqaimages) as 'CBSL_QA',sum(clientqaacceptimages)  as 'Client_QC' FROM scanned s
   ${whereClause}
   ${dateClause}
   ;`;
@@ -116,7 +102,7 @@ app.get('/summaryreport', cors(corsOptions), (req, res) => {
 });
 
 
-app.get('/detailedreport', cors(corsOptions), (req, res) => {
+app.get('/detailedreport',  (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
@@ -155,12 +141,12 @@ app.get('/detailedreport', cors(corsOptions), (req, res) => {
   const query = `
   SELECT 
     s.locationname,
-    SUM(s.scanimages) AS 'Total Scanned',
-    SUM(s.qcimages) AS 'Total QC',
-    SUM(s.indeximages) AS 'Total Index',
-    SUM(s.flaggingimages) AS 'Total Flagging',
-    SUM(s.cbslqaimages) AS 'Total cbslqa',
-    SUM(s.clientqaacceptimages) AS 'Total ClientQA'
+    SUM(s.scanimages) AS 'Total_Scanned',
+    SUM(s.qcimages) AS 'Total_QC',
+    SUM(s.indeximages) AS 'Total_Index',
+    SUM(s.flaggingimages) AS 'Total_Flagging',
+    SUM(s.cbslqaimages) AS 'Total_CBSL_QA',
+    SUM(s.clientqaacceptimages) AS 'Total_Client_QC'
   FROM 
     scanned s
   ${whereClause}
@@ -178,7 +164,7 @@ app.get('/detailedreport', cors(corsOptions), (req, res) => {
   });
 });
 
-app.get('/detailedreportcsv', cors(corsOptions), (req, res) => {
+app.get('/detailedreportcsv',  (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
@@ -263,7 +249,7 @@ app.get('/detailedreportcsv', cors(corsOptions), (req, res) => {
   });
 });
 
-app.get("/detailedreportlocationwise", cors(corsOptions), (req, res) => {
+app.get("/detailedreportlocationwise",  (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
@@ -328,7 +314,7 @@ app.get("/detailedreportlocationwise", cors(corsOptions), (req, res) => {
 });
 
 
-app.get("/detailedreportlocationwisecsv", cors(corsOptions), (req, res, next) => {
+app.get("/detailedreportlocationwisecsv",  (req, res, next) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
@@ -422,7 +408,7 @@ app.get("/detailedreportlocationwisecsv", cors(corsOptions), (req, res, next) =>
 });
 
 
-app.get('/UserDetailedReport',cors(corsOptions),(req,res)=>{
+app.get('/UserDetailedReport',(req,res)=>{
  const query="";
  mysql22.query(query,(err,results)=>{
   
