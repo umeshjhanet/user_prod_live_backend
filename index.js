@@ -17,10 +17,10 @@ const mysql22 = mysql.createConnection({
 });
 const misdb = mysql.createConnection({
   host: "localhost",
-  port: "3306",
+  port: "3307",
   user: "root",
   password: "root",
-  database: "updc_misdb",
+  database: "updc_live",
 });
 
 mysql22.connect((err) => {
@@ -288,19 +288,52 @@ app.get("/detailedreportlocationwise",  (req, res) => {
  
  
 
-  const query = `
+//   const query = `
+//   SELECT 
+//     SUBSTRING_INDEX(
+//       CONCAT_WS(', ', 
+//         COALESCE(s.scanuser, ''),
+//         COALESCE(s.qcuser, ''),
+//         COALESCE(s.indexuser, ''),
+//         COALESCE(s.flagginguser, ''),
+//         COALESCE(s.cbslqauser, ''),
+//         COALESCE(s.clientqaacceptuser, '')
+//       ), 
+//       ', ', 1
+//     ) AS user_type,
+//     s.locationname AS 'locationName',
+//     SUM(s.scanimages) AS 'Scanned',
+//     SUM(s.qcimages) AS 'QC',
+//     SUM(s.indeximages) AS 'Indexing',
+//     SUM(s.flaggingimages) AS 'Flagging',
+//     SUM(s.cbslqaimages) AS 'CBSL_QA',
+//     SUM(s.clientqaacceptimages) AS 'Client_QC'
+//   FROM 
+//     scanned s
+//   ${whereClause}
+//   ${dateClause}
+//   GROUP BY 
+//   s.locationname,
+//     user_type;
+// `;
+
+const query = `
   SELECT 
-    SUBSTRING_INDEX(
-      CONCAT_WS(', ', 
-        COALESCE(s.scanuser, ''),
-        COALESCE(s.qcuser, ''),
-        COALESCE(s.indexuser, ''),
-        COALESCE(s.flagginguser, ''),
-        COALESCE(s.cbslqauser, ''),
-        COALESCE(s.clientqaacceptuser, '')
-      ), 
-      ', ', 1
-    ) AS user_type,
+    CASE 
+      WHEN COALESCE(s.scanuser, s.qcuser, s.indexuser, s.flagginguser, s.cbslqauser, s.clientqaacceptuser) IS NULL 
+      THEN 'Unknown'
+      ELSE SUBSTRING_INDEX(
+        CONCAT_WS(', ', 
+          COALESCE(s.scanuser, ''),
+          COALESCE(s.qcuser, ''),
+          COALESCE(s.indexuser, ''),
+          COALESCE(s.flagginguser, ''),
+          COALESCE(s.cbslqauser, ''),
+          COALESCE(s.clientqaacceptuser, '')
+        ), 
+        ', ', 1
+      ) 
+    END AS user_type,
     s.locationname AS 'locationName',
     SUM(s.scanimages) AS 'Scanned',
     SUM(s.qcimages) AS 'QC',
@@ -313,9 +346,10 @@ app.get("/detailedreportlocationwise",  (req, res) => {
   ${whereClause}
   ${dateClause}
   GROUP BY 
-  s.locationname,
+    s.locationname,
     user_type;
 `;
+
 
 
 
@@ -434,7 +468,7 @@ mysql22.query(getCsv, (error, result) => {
 });
 
 
-app.get("/userdetailedreportlocationwisecsv", cors(corsOptions), (req, res, next) => {
+app.get("/userdetailedreportlocationwisecsv",  (req, res, next) => {
   let username=req.query.username
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
@@ -562,7 +596,7 @@ mysql22.query(getCsv, (error, result) => {
 });
 
 
-app.get('/UserDetailedReport', cors(corsOptions), (req, res) => {
+app.get('/UserDetailedReport',  (req, res) => {
   let username = req.query.username;
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
@@ -579,14 +613,13 @@ app.get('/UserDetailedReport', cors(corsOptions), (req, res) => {
   }
 
   let whereClause = "";
+let dateClause = "";
 
-  if (locationNames) {
+if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
-  }
+}
 
-  let dateClause = "";
-
-  if (startDate && endDate) {
+if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
     dateClause += ` (s.inventorydate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.scandate BETWEEN '${startDate}' AND '${endDate}'
@@ -597,50 +630,48 @@ app.get('/UserDetailedReport', cors(corsOptions), (req, res) => {
                 OR s.exportdate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
-  }
- 
-  const query = `
-  SELECT
-    CONCAT(
-        COALESCE(s.scanuser, ''),
-        COALESCE(s.qcuser, ''),
-        COALESCE(s.flagginguser, ''),
-        COALESCE(s.indexuser, ''),
-        COALESCE(s.cbslqauser, ''),
-        COALESCE(s.clientqaacceptuser, '')
-    ) AS user_type,
-    s.locationname AS 'locationName',
-    s.lotno AS 'LotNo',
-    s.casetypecode AS 'FileBarcode',
-    DATE_FORMAT(s.inventorydate, '%d-%m-%Y') AS 'Date',
-    SUM(s.scanimages) AS 'Scanned',
-    SUM(s.qcimages) AS 'QC',
-    SUM(s.indeximages) AS 'Indexing',
-    SUM(s.flaggingimages) AS 'Flagging',
-    SUM(s.cbslqaimages) AS 'CBSL_QA',
-    SUM(s.clientqaacceptimages) AS 'Client_QC'
-FROM 
-    scanned s
-${whereClause}  /* Include WHERE clause here */
-${dateClause}   /* Include date clause here */
-AND  /* Add AND condition if both WHERE and dateClause exist */
-    CONCAT(
-        COALESCE(s.scanuser, ''),
-        COALESCE(s.qcuser, ''),
-        COALESCE(s.flagginguser, ''),
-        COALESCE(s.indexuser, ''),
-        COALESCE(s.cbslqauser, ''),
-        COALESCE(s.clientqaacceptuser, '')
-    ) LIKE '${username}'
-GROUP BY
-    user_type,
-    s.locationname,
-    s.lotno,
-    s.casetypecode,
-    DATE_FORMAT(s.inventorydate, '%d-%m-%Y');
+}
+
+const query = `
+    SELECT
+        CONCAT(
+            COALESCE(s.scanuser, ''),
+            COALESCE(s.qcuser, ''),
+            COALESCE(s.flagginguser, ''),
+            COALESCE(s.indexuser, ''),
+            COALESCE(s.cbslqauser, ''),
+            COALESCE(s.clientqaacceptuser, '')
+        ) AS user_type,
+        s.locationname AS 'locationName',
+        s.lotno AS 'LotNo',
+        s.casetypecode AS 'FileBarcode',
+        DATE_FORMAT(s.inventorydate, '%d-%m-%Y') AS 'Date',
+        SUM(s.scanimages) AS 'Scanned',
+        SUM(s.qcimages) AS 'QC',
+        SUM(s.indeximages) AS 'Indexing',
+        SUM(s.flaggingimages) AS 'Flagging',
+        SUM(s.cbslqaimages) AS 'CBSL_QA',
+        SUM(s.clientqaacceptimages) AS 'Client_QC'
+    FROM 
+        scanned s
+    ${whereClause}  /* Include WHERE clause here */
+    ${dateClause}   /* Include date clause here */
+    AND  /* Add AND condition if both WHERE and dateClause exist */
+        CONCAT(
+            COALESCE(s.scanuser, ''),
+            COALESCE(s.qcuser, ''),
+            COALESCE(s.flagginguser, ''),
+            COALESCE(s.indexuser, ''),
+            COALESCE(s.cbslqauser, ''),
+            COALESCE(s.clientqaacceptuser, '')
+        ) LIKE '${username}'
+    GROUP BY
+        user_type,
+        s.locationname,
+        s.lotno,
+        s.casetypecode,
+        DATE_FORMAT(s.inventorydate, '%d-%m-%Y');
 `;
-
-
 
 
   mysql22.query(query, queryParams, (err, results) => {
@@ -829,14 +860,14 @@ app.post("/login", (req, res) => {
   });
 });
 
-app.get('/locations', cors(corsOptions), (req, res) => {
+app.get('/locations',  (req, res) => {
   mysql22.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
     if (err) throw err;
     res.json(results);
   });
 });
 
-app.get('/group_master' ,cors(corsOptions),(req,res)=>{
+app.get('/group_master' ,(req,res)=>{
   mysql22.query("select group_id,group_name from tbl_group_master order by group_name asc;" ,(err,results)=>{
     if (err){
       throw err;
@@ -845,7 +876,7 @@ app.get('/group_master' ,cors(corsOptions),(req,res)=>{
   })
   })
 
-  app.get("/privilege",cors(corsOptions),(req,res)=>{
+  app.get("/privilege",(req,res)=>{
     mysql22.query("select role_id,user_role from tbl_user_roles order by user_role asc;",(err,results)=>{
       if(err){
         throw err;
@@ -854,7 +885,7 @@ app.get('/group_master' ,cors(corsOptions),(req,res)=>{
     })
   })
 
-  app.get("/storage",cors(corsOptions),(req,res)=>{
+  app.get("/storage",(req,res)=>{
     mysql22.query("select * from tbl_storage_level",(err,results)=>{
       if(err){
         throw err;
@@ -863,7 +894,7 @@ app.get('/group_master' ,cors(corsOptions),(req,res)=>{
     })
   })
   
-  app.get("/reporting",cors(corsOptions),(req,res)=>{
+  app.get("/reporting",(req,res)=>{
     mysql22.query("select * from tbl_user_master where user_id  and active_inactive_users='1' order by first_name,last_name asc;",(err,results)=>{
       if(err){
         throw err;
