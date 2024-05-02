@@ -447,7 +447,7 @@ mysql22.query(getCsv, (error, result) => {
 });
 
 
-app.get("/userdetailedreportlocationwisecsv/:username", cors(corsOptions), (req, res, next) => {
+app.get("/userdetailedreportlocationwisecsv/:username",(req, res, next) => {
   let username=req.params.username
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
@@ -575,7 +575,7 @@ mysql22.query(getCsv, (error, result) => {
 });
 
 
-app.get('/UserDetailedReport', cors(corsOptions), (req, res) => {
+app.get('/UserDetailedReport',(req, res) => {
   let username = req.query.username;
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
