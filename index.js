@@ -316,7 +316,7 @@ app.get("/detailedreportlocationwise",  (req, res) => {
 //   s.locationname,
 //     user_type;
 // `;
-
+//Jai Shree Ram
 const query = `
   SELECT 
     CASE 
@@ -333,6 +333,7 @@ const query = `
         ), 
         ', ', 1
       ) 
+     
     END AS user_type,
     s.locationname AS 'locationName',
     SUM(s.scanimages) AS 'Scanned',
