@@ -19,8 +19,8 @@ const misdb = mysql.createConnection({
   host: "localhost",
   port: "3307",
   user: "root",
-  password: "Cbdbblr@452",
-  database: "updc_misdb",
+  password: "root",
+  database: "updc_live",
 });
 
 mysql22.connect((err) => {
@@ -238,7 +238,7 @@ app.get("/detailedreportcsv", (req, res) => {
       return;
     }
     res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment;filename=export.csv");
+    res.setHeader("Content-Disposition", "attachment;filename=All location.csv");
     res.write(
       "Sr. No.,Location,Scanning ADF,ImageQC,Flagging,Indexing,CBSLQA,Client QA\n"
     );
@@ -659,6 +659,23 @@ app.get("/businessrate", (req, res) => {
   });
 });
 
+app.get("/getbusinessrate", (req, res) => {
+  const query = `
+    SELECT b.*, p.id, l.LocationId
+    FROM tbl_set_business AS b
+    JOIN tbl_projectmaster AS p ON b.id = p.id
+    JOIN locationmaster AS l ON b.LocationId = l.LocationId
+  `;
+  
+  misdb.query(query, (err, results) => {
+    if (err) {
+      throw err;
+    }
+    res.json(results);
+  });
+});
+
+
 app.put("/updatebusinessrate/:id", (req, res) => {
   const id = req.params.id; // Get the id from req.params
   const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate } =
@@ -713,15 +730,15 @@ app.put("/updatebusinessrate/:id", (req, res) => {
 });
 
 app.post("/createbusinessrate", (req, res) => {
-  const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate } =
+  const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,ProjectId,LocationId } =
     req.body;
 
   const query =
-    "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate) VALUES (?, ?, ?, ?, ?, ?)";
+    "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,ProjectId,LocationId) VALUES (?, ?, ?, ?, ?, ?,?,?)";
 
   misdb.query(
     query,
-    [ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate],
+    [ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,ProjectId,LocationId],
     (err, result) => {
       if (err) {
         console.error("Error creating business rate:", err);
@@ -757,7 +774,7 @@ app.get("/userdetailedreportlocationwise", (req, res) => {
   if (locationName) {
     whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
   }
-
+  
   const query = `
   SELECT 
     locationname AS 'locationName',
@@ -877,7 +894,7 @@ app.get("/userdetailedreportlocationwise", (req, res) => {
     DATE ASC;
 `;
 
-  console.log("Query:", query);
+ 
 
   mysql22.query(query, queryParams, (err, results) => {
     if (err) {
@@ -916,7 +933,7 @@ app.get("/userdetailedreportlocationwisecsv",  (req, res, next) => {
   }
 
   
-
+  let fileName = `${locationName.join("_")}_${username}.csv`;
 const getCsv = `
 
 SELECT 
@@ -1050,7 +1067,7 @@ mysql22.query(getCsv, (error, result) => {
     return;
   }
   res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", "attachment;filename=export.csv");
+  res.setHeader("Content-Disposition", `attachment;filename=${fileName}`);
   res.write('Sr. No.,Location Name,UserName,LotNo,Date,Scanned,QC,Index,Flagging,CBSL_QA,Client_QC\n');
   // Write CSV data
   data.forEach((row, index) => {
@@ -1229,7 +1246,7 @@ app.get("/detailedreportlocationwisecsv", (req, res) => {
     whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
   }
 
-  
+  let fileName = `${locationName.join("_")}.csv`;
 
 const getCsv = `
 
@@ -1347,7 +1364,7 @@ mysql22.query(getCsv, (error, result) => {
     return;
   }
   res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", "attachment;filename=export.csv");
+  res.setHeader("Content-Disposition", `attachment;filename=${fileName}`); 
   res.write('Sr. No.,Location Name,UserName,Scanned,QC,Index,Flagging,CBSL_QA,Client_QC\n');
   // Write CSV data
   data.forEach((row, index) => {
@@ -1369,3 +1386,197 @@ mysql22.query(getCsv, (error, result) => {
   });
 });
 
+app.post("/createproject", (req, res) => {
+  const { ProjectName } =
+    req.body;
+
+  const query =
+    "INSERT INTO tbl_projectmaster (ProjectName) VALUES (?)";
+
+  misdb.query(
+    query,
+    [ProjectName],
+    (err, result) => {
+      if (err) {
+        console.error("Error creating Project:", err);
+        res
+          .status(500)
+          .json({ error: "An error occurred while Project" });
+      } else {
+        console.log("Project created successfully:", result);
+        res.status(200).json({ message: "Project created successfully" });
+      }
+    }
+  );
+});
+
+app.get("/getproject", (req, res) => {
+  misdb.query("select * from tbl_projectmaster ", (err, results) => {
+    if (err) {
+      throw err;
+    }
+    res.json(results);
+  });
+});
+
+app.put('/updategroup/:id', (req, res) => {
+  const id = req.params.id;
+  const {ProjectName } = req.body;
+  const query = "UPDATE tbl_projectmaster SET ProjectName = ? WHERE id = ?";
+
+  misdb.query(query, [ProjectName, id], (err, result) => {
+    if (err) {
+      console.error("Error updating Project name:", err);
+      res.status(500).json({ error: "An error occurred while updating Project name" });
+    } else {
+      if (result.affectedRows === 0) {
+        res.status(404).json({ error: "Project not found" });
+      } else {
+        console.log("Project name updated successfully. Project ID:", id);
+        res.status(200).json({ message: "Project name updated successfully", id: id });
+      }
+    }
+  });
+});
+
+app.delete("/deleteproject/:id", (req, res) => {
+  const { id} = req.params;
+  misdb.query(
+    "DELETE FROM tbl_projectmaster WHERE id = ?",
+    [id],
+    (err) => {
+      if (err) throw err;
+      res.json({ message: "Project deleted successfully" });
+    }
+  );
+});
+
+app.post("/createtask", (req, res) => {
+  const { TaskName } =
+    req.body;
+
+  const query =
+    "INSERT INTO tbl_taskmaster (TaskName) VALUES (?)";
+
+  misdb.query(
+    query,
+    [TaskName],
+    (err, result) => {
+      if (err) {
+        console.error("Error creating Task:", err);
+        res
+          .status(500)
+          .json({ error: "An error occurred while Task" });
+      } else {
+        console.log("Task created successfully:", result);
+        res.status(200).json({ message: "Task created successfully" });
+      }
+    }
+  );
+});
+
+app.get("/gettask", (req, res) => {
+  misdb.query("select * from tbl_taskmaster ", (err, results) => {
+    if (err) {
+      throw err;
+    }
+    res.json(results);
+  });
+});
+
+app.put('/updatetask/:id', (req, res) => {
+  const id = req.params.id;
+  const {TaskName } = req.body;
+  const query = "UPDATE tbl_taskmaster SET TaskName = ? WHERE id = ?";
+
+  misdb.query(query, [TaskName, id], (err, result) => {
+    if (err) {
+      console.error("Error updating Task name:", err);
+      res.status(500).json({ error: "An error occurred while updating Task name" });
+    } else {
+      if (result.affectedRows === 0) {
+        res.status(404).json({ error: "Task not found" });
+      } else {
+        console.log("Task name updated successfully. Task ID:", id);
+        res.status(200).json({ message: "Task name updated successfully", id: id });
+      }
+    }
+  });
+});
+
+app.delete("/deletetask/:id", (req, res) => {
+  const { id} = req.params;
+  misdb.query(
+    "DELETE FROM tbl_taskmaster WHERE id = ?",
+    [id],
+    (err) => {
+      if (err) throw err;
+      res.json({ message: "task deleted successfully" });
+    }
+  );
+});
+
+app.post("/createstaff", (req, res) => {
+  const {ProjectId,LocationId,Date,StaffName,TaskName,Volume } =
+    req.body;
+
+  const query =
+    "INSERT INTO tbl_nontech_staff (ProjectId,LocationId,Date,StaffName,TaskName,Volume) VALUES (?)";
+
+  misdb.query(
+    query,
+    [ProjectId,LocationId,Date,StaffName,TaskName,Volume],
+    (err, result) => {
+      if (err) {
+        console.error("Error creating non-tech staff:", err);
+        res
+          .status(500)
+          .json({ error: "An error occurred while non-tech staff" });
+      } else {
+        console.log("non-tech staff created successfully:", result);
+        res.status(200).json({ message: "non-tech staff created successfully" });
+      }
+    }
+  );
+});
+
+app.get("/getstaff", (req, res) => {
+  misdb.query("select * from tbl_nontech_staff ", (err, results) => {
+    if (err) {
+      throw err;
+    }
+    res.json(results);
+  });
+});
+
+app.put('/updatestaff/:id', (req, res) => {
+  const id = req.params.id;
+  const {ProjectId,LocationId,Date,StaffName,TaskName,Volume } = req.body;
+  const query = "UPDATE tbl_taskmaster SET ProjectId=?,LocationId=?,Date=?,StaffName=? TaskName = ? Volume=? WHERE id = ?";
+
+  misdb.query(query, [ProjectId,LocationId,Date,StaffName,TaskName,Volume, id], (err, result) => {
+    if (err) {
+      console.error("Error updating nontech staff name:", err);
+      res.status(500).json({ error: "An error occurred while updating nontech staff name" });
+    } else {
+      if (result.affectedRows === 0) {
+        res.status(404).json({ error: "nontech staff not found" });
+      } else {
+        console.log("nontech staff name updated successfully. nontech staff ID:", id);
+        res.status(200).json({ message: "nontech staff name updated successfully", id: id });
+      }
+    }
+  });
+});
+
+app.delete("/deletestaff/:id", (req, res) => {
+  const { id} = req.params;
+  misdb.query(
+    "DELETE FROM tbl_nontech_staff WHERE id = ?",
+    [id],
+    (err) => {
+      if (err) throw err;
+      res.json({ message: "staff deleted successfully" });
+    }
+  );
+});
