@@ -5,8 +5,10 @@ const bcrypt = require('bcrypt');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+
 app.use(express.json());
 app.use(cors());
+
 
 const mysql22 = mysql.createConnection({
   host: "192.168.3.124",
@@ -23,6 +25,7 @@ const misdb = mysql.createConnection({
   database: "updc_misdb",
 });
 
+
 mysql22.connect((err) => {
   if (err) {
     console.error("Error connecting to MySQL:", err);
@@ -30,6 +33,7 @@ mysql22.connect((err) => {
   }
   console.log("Connected to MySQL database");
 });
+
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
@@ -39,6 +43,7 @@ app.options("/users", (req, res) => {
 });
 
 
+
 app.get('/locations', (req, res) => {
     mysql22.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
       if (err) throw err;
@@ -46,12 +51,15 @@ app.get('/locations', (req, res) => {
     });
   });
 
+
 app.get('/summaryreport',  (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   const queryParams = [];
+
 
   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
@@ -61,13 +69,17 @@ app.get('/summaryreport',  (req, res) => {
     }
   }
 
+
   let whereClause = "";
+
 
   if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -82,6 +94,7 @@ app.get('/summaryreport',  (req, res) => {
                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
   }
 
+
   const query = `
   SELECT 
   sum(s.scanimages) as 'Scanned',sum(qcimages) as 'QC',
@@ -90,6 +103,7 @@ app.get('/summaryreport',  (req, res) => {
   ${whereClause}
   ${dateClause}
   ;`;
+
 
 
   mysql22.query(query, queryParams, (err, results) => {
@@ -108,7 +122,9 @@ app.get('/detailedreport',  (req, res) => {
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   const queryParams = [];
+
 
   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
@@ -118,13 +134,17 @@ app.get('/detailedreport',  (req, res) => {
     }
   }
 
+
   let whereClause = "";
+
 
   if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -138,6 +158,7 @@ app.get('/detailedreport',  (req, res) => {
                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
   }
+
 
   const query = `
   SELECT 
@@ -155,6 +176,7 @@ app.get('/detailedreport',  (req, res) => {
   GROUP BY 
     s.locationname`;
 
+
   mysql22.query(query, queryParams, (err, results) => {
     if (err) {
       console.error("Error fetching summary data:", err);
@@ -165,12 +187,15 @@ app.get('/detailedreport',  (req, res) => {
   });
 });
 
+
 app.get('/detailedreportcsv',  (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   const queryParams = [];
+
 
   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
@@ -180,13 +205,17 @@ app.get('/detailedreportcsv',  (req, res) => {
     }
   }
 
+
   let whereClause = "";
+
 
   if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -200,6 +229,7 @@ app.get('/detailedreportcsv',  (req, res) => {
                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
   }
+
 
   const getCsv = `
     SELECT 
@@ -216,6 +246,7 @@ app.get('/detailedreportcsv',  (req, res) => {
     ${dateClause}
     GROUP BY 
       s.locationname`;
+
 
   mysql22.query(getCsv, (error, result) => {
     if (error) {
@@ -245,17 +276,21 @@ app.get('/detailedreportcsv',  (req, res) => {
       );
     });
 
+
     
     res.end();
   });
 });
+
 
 app.get("/detailedreportlocationwise",  (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   const queryParams = [];
+
 
   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
@@ -265,13 +300,17 @@ app.get("/detailedreportlocationwise",  (req, res) => {
     }
   }
 
+
   let whereClause = "";
+
 
   if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -288,19 +327,54 @@ app.get("/detailedreportlocationwise",  (req, res) => {
  
  
 
-  const query = `
+
+//   const query = `
+//   SELECT 
+//     SUBSTRING_INDEX(
+//       CONCAT_WS(', ', 
+//         COALESCE(s.scanuser, ''),
+//         COALESCE(s.qcuser, ''),
+//         COALESCE(s.indexuser, ''),
+//         COALESCE(s.flagginguser, ''),
+//         COALESCE(s.cbslqauser, ''),
+//         COALESCE(s.clientqaacceptuser, '')
+//       ), 
+//       ', ', 1
+//     ) AS user_type,
+//     s.locationname AS 'locationName',
+//     SUM(s.scanimages) AS 'Scanned',
+//     SUM(s.qcimages) AS 'QC',
+//     SUM(s.indeximages) AS 'Indexing',
+//     SUM(s.flaggingimages) AS 'Flagging',
+//     SUM(s.cbslqaimages) AS 'CBSL_QA',
+//     SUM(s.clientqaacceptimages) AS 'Client_QC'
+//   FROM 
+//     scanned s
+//   ${whereClause}
+//   ${dateClause}
+//   GROUP BY 
+//   s.locationname,
+//     user_type;
+// `;
+
+
+const query = `
   SELECT 
-    SUBSTRING_INDEX(
-      CONCAT_WS(', ', 
-        COALESCE(s.scanuser, ''),
-        COALESCE(s.qcuser, ''),
-        COALESCE(s.indexuser, ''),
-        COALESCE(s.flagginguser, ''),
-        COALESCE(s.cbslqauser, ''),
-        COALESCE(s.clientqaacceptuser, '')
-      ), 
-      ', ', 1
-    ) AS user_type,
+    CASE 
+      WHEN COALESCE(s.scanuser, s.qcuser, s.indexuser, s.flagginguser, s.cbslqauser, s.clientqaacceptuser) IS NULL 
+      THEN 'Unknown'
+      ELSE SUBSTRING_INDEX(
+        CONCAT_WS(', ', 
+          COALESCE(s.scanuser, ''),
+          COALESCE(s.qcuser, ''),
+          COALESCE(s.indexuser, ''),
+          COALESCE(s.flagginguser, ''),
+          COALESCE(s.cbslqauser, ''),
+          COALESCE(s.clientqaacceptuser, '')
+        ), 
+        ', ', 1
+      ) 
+    END AS user_type,
     s.locationname AS 'locationName',
     SUM(s.scanimages) AS 'Scanned',
     SUM(s.qcimages) AS 'QC',
@@ -313,9 +387,11 @@ app.get("/detailedreportlocationwise",  (req, res) => {
   ${whereClause}
   ${dateClause}
   GROUP BY 
-  s.locationname,
+    s.locationname,
     user_type;
 `;
+
+
 
 
 
@@ -330,14 +406,18 @@ app.get("/detailedreportlocationwise",  (req, res) => {
 });
 
 
+
 app.get("/detailedreportlocationwisecsv",  (req, res, next) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   console.log("Location Names:", locationNames);
 
+
   const queryParams = [];
+
 
   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
@@ -347,15 +427,20 @@ app.get("/detailedreportlocationwisecsv",  (req, res, next) => {
     }
   }
 
+
   let whereClause = "";
+
 
   if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   console.log("Where Clause:", whereClause); // Log generated whereClause
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -370,7 +455,9 @@ app.get("/detailedreportlocationwisecsv",  (req, res, next) => {
                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
   }
 
+
   console.log("Date Clause:", dateClause); // Log generated dateClause
+
 
   const getCsv = `
   SELECT 
@@ -398,6 +485,7 @@ app.get("/detailedreportlocationwisecsv",  (req, res, next) => {
   GROUP BY 
     user_type;
 `;
+
 
 mysql22.query(getCsv, (error, result) => {
   if (error) {
@@ -428,21 +516,26 @@ mysql22.query(getCsv, (error, result) => {
   });
 
 
+
     // End response
     res.end();
   });
 });
 
 
-app.get("/userdetailedreportlocationwisecsv", cors(corsOptions), (req, res, next) => {
+
+app.get("/userdetailedreportlocationwisecsv",  (req, res, next) => {
   let username=req.query.username
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   console.log("Location Names:", locationNames);
 
+
   const queryParams = [];
+
 
   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
@@ -452,15 +545,20 @@ app.get("/userdetailedreportlocationwisecsv", cors(corsOptions), (req, res, next
     }
   }
 
+
   let whereClause = "";
+
 
   if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -479,7 +577,9 @@ app.get("/userdetailedreportlocationwisecsv", cors(corsOptions), (req, res, next
 
 
 
+
 const getCsv = `
+
 
 SELECT
     CONCAT(
@@ -521,7 +621,9 @@ GROUP BY
     DATE_FORMAT(s.inventorydate, '%d-%m-%Y');
 `;
 
+
   
+
 
 mysql22.query(getCsv, (error, result) => {
   if (error) {
@@ -556,19 +658,23 @@ mysql22.query(getCsv, (error, result) => {
   });
 
 
+
     // End response
     res.end();
   });
 });
 
 
-app.get('/UserDetailedReport',(req, res) => {
+
+app.get('/UserDetailedReport',  (req, res) => {
   let username = req.query.username;
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   const queryParams = [];
+
 
   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
@@ -578,15 +684,17 @@ app.get('/UserDetailedReport',(req, res) => {
     }
   }
 
+
   let whereClause = "";
+let dateClause = "";
 
-  if (locationNames) {
+
+if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
-  }
+}
 
-  let dateClause = "";
 
-  if (startDate && endDate) {
+if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
     dateClause += ` (s.inventorydate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.scandate BETWEEN '${startDate}' AND '${endDate}'
@@ -597,49 +705,49 @@ app.get('/UserDetailedReport',(req, res) => {
                 OR s.exportdate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
-  }
- 
-  const query = `
-  SELECT
-    CONCAT(
-        COALESCE(s.scanuser, ''),
-        COALESCE(s.qcuser, ''),
-        COALESCE(s.flagginguser, ''),
-        COALESCE(s.indexuser, ''),
-        COALESCE(s.cbslqauser, ''),
-        COALESCE(s.clientqaacceptuser, '')
-    ) AS user_type,
-    s.locationname AS 'locationName',
-    s.lotno AS 'LotNo',
-    s.casetypecode AS 'FileBarcode',
-    DATE_FORMAT(s.inventorydate, '%d-%m-%Y') AS 'Date',
-    SUM(s.scanimages) AS 'Scanned',
-    SUM(s.qcimages) AS 'QC',
-    SUM(s.indeximages) AS 'Indexing',
-    SUM(s.flaggingimages) AS 'Flagging',
-    SUM(s.cbslqaimages) AS 'CBSL_QA',
-    SUM(s.clientqaacceptimages) AS 'Client_QC'
-FROM 
-    scanned s
-${whereClause}  /* Include WHERE clause here */
-${dateClause}   /* Include date clause here */
-AND  /* Add AND condition if both WHERE and dateClause exist */
-    CONCAT(
-        COALESCE(s.scanuser, ''),
-        COALESCE(s.qcuser, ''),
-        COALESCE(s.flagginguser, ''),
-        COALESCE(s.indexuser, ''),
-        COALESCE(s.cbslqauser, ''),
-        COALESCE(s.clientqaacceptuser, '')
-    ) LIKE '${username}'
-GROUP BY
-    user_type,
-    s.locationname,
-    s.lotno,
-    s.casetypecode,
-    DATE_FORMAT(s.inventorydate, '%d-%m-%Y');
-`;
+}
 
+
+const query = `
+    SELECT
+        CONCAT(
+            COALESCE(s.scanuser, ''),
+            COALESCE(s.qcuser, ''),
+            COALESCE(s.flagginguser, ''),
+            COALESCE(s.indexuser, ''),
+            COALESCE(s.cbslqauser, ''),
+            COALESCE(s.clientqaacceptuser, '')
+        ) AS user_type,
+        s.locationname AS 'locationName',
+        s.lotno AS 'LotNo',
+        s.casetypecode AS 'FileBarcode',
+        DATE_FORMAT(s.inventorydate, '%d-%m-%Y') AS 'Date',
+        SUM(s.scanimages) AS 'Scanned',
+        SUM(s.qcimages) AS 'QC',
+        SUM(s.indeximages) AS 'Indexing',
+        SUM(s.flaggingimages) AS 'Flagging',
+        SUM(s.cbslqaimages) AS 'CBSL_QA',
+        SUM(s.clientqaacceptimages) AS 'Client_QC'
+    FROM 
+        scanned s
+    ${whereClause}  /* Include WHERE clause here */
+    ${dateClause}   /* Include date clause here */
+    AND  /* Add AND condition if both WHERE and dateClause exist */
+        CONCAT(
+            COALESCE(s.scanuser, ''),
+            COALESCE(s.qcuser, ''),
+            COALESCE(s.flagginguser, ''),
+            COALESCE(s.indexuser, ''),
+            COALESCE(s.cbslqauser, ''),
+            COALESCE(s.clientqaacceptuser, '')
+        ) LIKE '${username}'
+    GROUP BY
+        user_type,
+        s.locationname,
+        s.lotno,
+        s.casetypecode,
+        DATE_FORMAT(s.inventorydate, '%d-%m-%Y');
+`;
 
 
 
@@ -652,6 +760,7 @@ GROUP BY
     res.json(results);
   });
 });
+
 
 
 app.post("/createuser", (req, res) => {
@@ -776,6 +885,7 @@ app.post("/createuser", (req, res) => {
 
 
 
+
 app.post("/login", (req, res) => {
   const { user_email_id, password } = req.body;
   const selectQuery = "SELECT * FROM tbl_user_master WHERE user_email_id=?";
@@ -829,14 +939,16 @@ app.post("/login", (req, res) => {
   });
 });
 
-app.get('/locations', cors(corsOptions), (req, res) => {
+
+app.get('/locations',  (req, res) => {
   mysql22.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
     if (err) throw err;
     res.json(results);
   });
 });
 
-app.get('/group_master' ,cors(corsOptions),(req,res)=>{
+
+app.get('/group_master' ,(req,res)=>{
   mysql22.query("select group_id,group_name from tbl_group_master order by group_name asc;" ,(err,results)=>{
     if (err){
       throw err;
@@ -845,7 +957,8 @@ app.get('/group_master' ,cors(corsOptions),(req,res)=>{
   })
   })
 
-  app.get("/privilege",cors(corsOptions),(req,res)=>{
+
+  app.get("/privilege",(req,res)=>{
     mysql22.query("select role_id,user_role from tbl_user_roles order by user_role asc;",(err,results)=>{
       if(err){
         throw err;
@@ -854,7 +967,8 @@ app.get('/group_master' ,cors(corsOptions),(req,res)=>{
     })
   })
 
-  app.get("/storage",cors(corsOptions),(req,res)=>{
+
+  app.get("/storage",(req,res)=>{
     mysql22.query("select * from tbl_storage_level",(err,results)=>{
       if(err){
         throw err;
@@ -863,7 +977,7 @@ app.get('/group_master' ,cors(corsOptions),(req,res)=>{
     })
   })
   
-  app.get("/reporting",cors(corsOptions),(req,res)=>{
+  app.get("/reporting",(req,res)=>{
     mysql22.query("select * from tbl_user_master where user_id  and active_inactive_users='1' order by first_name,last_name asc;",(err,results)=>{
       if(err){
         throw err;
@@ -872,7 +986,66 @@ app.get('/group_master' ,cors(corsOptions),(req,res)=>{
     })
   })
 
+  app.get("/businessrate",(req,res)=>{
+    misdb.query("select * from tbl_set_business ",(err,results)=>{
+      if(err){
+        throw err;
+      }
+      res.json(results)
+    })
+  })
 
+  app.put('/updatebusinessrate/:id', (req, res) => {
+    const id = req.params.id; // Get the id from req.params
+    const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate } = req.body;
+    const queryParams = [];
+    let query = `UPDATE tbl_set_business SET`;
   
+    // Check if each field is provided in the request body and add it to the query
+    if (ScanRate !== undefined) {
+      query += ` ScanRate = ?,`;
+      queryParams.push(ScanRate);
+    }
+    if (QcRate !== undefined) {
+      query += ` QcRate = ?,`;
+      queryParams.push(QcRate);
+    }
+    if (IndexRate !== undefined) {
+      query += ` IndexRate = ?,`;
+      queryParams.push(IndexRate);
+    }
+    if (FlagRate !== undefined) {
+      query += ` FlagRate = ?,`;
+      queryParams.push(FlagRate);
+    }
+    if (CbslQaRate !== undefined) {
+      query += ` CbslQaRate = ?,`;
+      queryParams.push(CbslQaRate);
+    }
+    if (ClientQcRate !== undefined) {
+      query += ` ClientQcRate = ?,`;
+      queryParams.push(ClientQcRate);
+    }
+  
+    // Remove the trailing comma and add the WHERE clause
+    query = query.slice(0, -1); // Remove the last comma
+    query += ` WHERE id = ?;`; // Add the WHERE clause
+  
+    // Push the id to queryParams array
+    queryParams.push(id);
+  
+    // Execute the query
+    misdb.query(query, queryParams, (err, result) => {
+      if (err) {
+        console.error("Error updating rate:", err);
+        res.status(500).json({ error: "An error occurred while updating business rate" });
+      } else {
+        res.status(200).json({ message: 'Rate updated successfully', id: id });
+      }
+    });
+  });
+  
+
+
 
  
