@@ -5,8 +5,10 @@ const bcrypt = require("bcrypt");
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+
 app.use(express.json());
 app.use(cors());
+
 
 const mysql22 = mysql.createConnection({
   host: "192.168.3.124",
@@ -23,6 +25,7 @@ const misdb = mysql.createConnection({
   database: "updc_live",
 });
 
+
 mysql22.connect((err) => {
   if (err) {
     console.error("Error connecting to MySQL:", err);
@@ -31,6 +34,7 @@ mysql22.connect((err) => {
   console.log("Connected to MySQL database");
 });
 
+
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
@@ -38,10 +42,9 @@ app.options("/users", (req, res) => {
   res.sendStatus(200);
 });
 
-app.get("/locations", (req, res) => {
-  mysql22.query(
-    "SELECT LocationID, LocationName from locationmaster;",
-    (err, results) => {
+
+app.get('/locations', (req, res) => {
+    mysql22.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
       if (err) throw err;
       res.json(results);
     }
@@ -53,12 +56,10 @@ app.get("/summaryreport", (req, res) => {
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   const queryParams = [];
 
-  if (
-    !locationNames ||
-    (Array.isArray(locationNames) && locationNames.length === 0)
-  ) {
+  if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
   } else {
     if (!Array.isArray(locationNames)) {
@@ -66,13 +67,17 @@ app.get("/summaryreport", (req, res) => {
     }
   }
 
+
   let whereClause = "";
+
 
   if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -86,6 +91,7 @@ app.get("/summaryreport", (req, res) => {
                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
   }
+
 
   const query = `
   SELECT 
@@ -112,23 +118,27 @@ app.get("/detailedreport", (req, res) => {
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   const queryParams = [];
 
-  if (!locationName || locationName.length === 0) {
-    locationName = null;
+  if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
+    locationNames = null;
   } else {
     if (!Array.isArray(locationName)) {
       locationName = [locationName];
     }
   }
 
+
   let whereClause = "";
 
-  if (locationName) {
-    whereClause = `WHERE s.locationname IN ('${locationName.join("','")}')`;
+  if (locationNames) {
+    whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -139,6 +149,7 @@ app.get("/detailedreport", (req, res) => {
                 OR s.cbslqadate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}')`;
   }
+
 
   const query = `
   SELECT 
@@ -156,6 +167,7 @@ app.get("/detailedreport", (req, res) => {
   GROUP BY 
     s.locationname`;
 
+
   mysql22.query(query, queryParams, (err, results) => {
     if (err) {
       console.error("Error fetching summary data:", err);
@@ -166,18 +178,15 @@ app.get("/detailedreport", (req, res) => {
   });
 });
 
-
-app.get("/detailedreportcsv", (req, res) => {
+app.get('/detailedreportcsv',  (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
+
   const queryParams = [];
 
-  if (
-    !locationNames ||
-    (Array.isArray(locationNames) && locationNames.length === 0)
-  ) {
+  if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
   } else {
     if (!Array.isArray(locationNames)) {
@@ -185,13 +194,17 @@ app.get("/detailedreportcsv", (req, res) => {
     }
   }
 
+
   let whereClause = "";
+
 
   if (locationNames) {
     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
   }
 
+
   let dateClause = "";
+
 
   if (startDate && endDate) {
     dateClause = whereClause ? `AND` : `WHERE`;
@@ -205,6 +218,7 @@ app.get("/detailedreportcsv", (req, res) => {
                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
   }
+
 
   const getCsv = `
     SELECT 
@@ -221,6 +235,7 @@ app.get("/detailedreportcsv", (req, res) => {
     ${dateClause}
     GROUP BY 
       s.locationname`;
+
 
   mysql22.query(getCsv, (error, result) => {
     if (error) {
