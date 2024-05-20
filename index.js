@@ -942,7 +942,6 @@ app.get("/userdetailedreportlocationwisecsv",  (req, res, next) => {
   }
 
   let whereClause = "";
-
   if (locationName) {
     whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
   }
