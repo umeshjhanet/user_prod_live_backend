@@ -19,10 +19,10 @@ const mysql22 = mysql.createConnection({
 });
 const misdb = mysql.createConnection({
   host: "localhost",
-  port: "3307",
+  port: "3306",
   user: "root",
   password: "root",
-  database: "updc_live",
+  database: "updc_misdb",
 });
 
 
@@ -665,20 +665,12 @@ app.get("/reporting", (req, res) => {
   );
 });
 
-app.get("/businessrate", (req, res) => {
-  misdb.query("select * from tbl_set_business ", (err, results) => {
-    if (err) {
-      throw err;
-    }
-    res.json(results);
-  });
-});
+
 
 app.get("/getbusinessrate", (req, res) => {
-  const query = `
-    SELECT b.*, p.id, l.LocationId
+   const query = `
+    SELECT b.*, l.LocationId, l.LocationName
     FROM tbl_set_business AS b
-    JOIN tbl_projectmaster AS p ON b.id = p.id
     JOIN locationmaster AS l ON b.LocationId = l.LocationId
   `;
   
@@ -744,30 +736,56 @@ app.put("/updatebusinessrate/:id", (req, res) => {
   });
 });
 
+// app.post("/createbusinessrate", (req, res) => {
+//   const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,LocationId } =
+//     req.body;
+
+//   const query =
+//     "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,LocationId) VALUES (?, ?, ?, ?, ?,?,?)";
+
+//   misdb.query(
+//     query,
+//     [ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,LocationId],
+//     (err, result) => {
+//       if (err) {
+//         console.error("Error creating business rate:", err);
+//         res
+//           .status(500)
+//           .json({ error: "An error occurred while creating business rate" });
+//       } else {
+//         console.log("Business rate created successfully:", result);
+//         res.status(200).json({ message: "Rate created successfully" });
+//       }
+//     }
+//   );
+// });
+
+
 app.post("/createbusinessrate", (req, res) => {
-  const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,ProjectId,LocationId } =
-    req.body;
+  const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId } = req.body;
 
-  const query =
-    "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,ProjectId,LocationId) VALUES (?, ?, ?, ?, ?, ?,?,?)";
+ 
+  // Ensure all rates are numbers and default to 0 if not provided
+  const scanRate = parseFloat(ScanRate) || 0;
+  const qcRate = parseFloat(QcRate) || 0;
+  const indexRate = parseFloat(IndexRate) || 0;
+  const flagRate = parseFloat(FlagRate) || 0;
+  const cbslQaRate = parseFloat(CbslQaRate) || 0;
+  const clientQcRate = parseFloat(ClientQcRate) || 0;
+  
 
-  misdb.query(
-    query,
-    [ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,ProjectId,LocationId],
-    (err, result) => {
+  const query = "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+  misdb.query(query, [scanRate, qcRate, indexRate, flagRate, cbslQaRate, clientQcRate, LocationId], (err, result) => {
       if (err) {
-        console.error("Error creating business rate:", err);
-        res
-          .status(500)
-          .json({ error: "An error occurred while creating business rate" });
+          console.error("Error creating business rate:", err);
+          res.status(500).json({ error: "An error occurred while creating business rate" });
       } else {
-        console.log("Business rate created successfully:", result);
-        res.status(200).json({ message: "Rate created successfully" });
+          console.log("Business rate created successfully:", result);
+          res.status(200).json({ message: "Rate created successfully" });
       }
-    }
-  );
+  });
 });
-
 app.get("/userdetailedreportlocationwise", (req, res) => {
   let username = req.query.username;
   let locationName = req.query.locationName;
@@ -1433,7 +1451,7 @@ app.get("/getproject", (req, res) => {
   });
 });
 
-app.put('/updategroup/:id', (req, res) => {
+app.put('/updateproject/:id', (req, res) => {
   const id = req.params.id;
   const {ProjectName } = req.body;
   const query = "UPDATE tbl_projectmaster SET ProjectName = ? WHERE id = ?";
@@ -1531,28 +1549,27 @@ app.delete("/deletetask/:id", (req, res) => {
 });
 
 app.post("/createstaff", (req, res) => {
-  const {ProjectId,LocationId,Date,StaffName,TaskName,Volume } =
-    req.body;
+  const { ProjectId, LocationId, Date, StaffName, TaskName, Volume } = req.body;
 
   const query =
-    "INSERT INTO tbl_nontech_staff (ProjectId,LocationId,Date,StaffName,TaskName,Volume) VALUES (?)";
+    "INSERT INTO tbl_nontech_staff (ProjectId, LocationId, Date, StaffName, TaskName, Volume) VALUES (?, ?, ?, ?, ?, ?)";
 
   misdb.query(
     query,
-    [ProjectId,LocationId,Date,StaffName,TaskName,Volume],
+    [ProjectId, LocationId, Date, StaffName, TaskName, Volume],
     (err, result) => {
       if (err) {
         console.error("Error creating non-tech staff:", err);
-        res
-          .status(500)
-          .json({ error: "An error occurred while non-tech staff" });
+        res.status(500).json({ error: "An error occurred while creating non-tech staff" });
       } else {
-        console.log("non-tech staff created successfully:", result);
-        res.status(200).json({ message: "non-tech staff created successfully" });
+        console.log("Non-tech staff created successfully:", result);
+        res.status(200).json({ message: "Non-tech staff created successfully" });
       }
     }
   );
 });
+
+
 
 app.get("/getstaff", (req, res) => {
   misdb.query("select * from tbl_nontech_staff ", (err, results) => {
