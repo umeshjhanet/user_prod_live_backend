@@ -19,10 +19,10 @@ const mysql22 = mysql.createConnection({
 });
 const misdb = mysql.createConnection({
   host: "localhost",
-  port: "3306",
+  port: "3307",
   user: "root",
   password: "root",
-  database: "updc_misdb",
+  database: "updc_live",
 });
 
 
@@ -114,7 +114,7 @@ app.get("/summaryreport", (req, res) => {
 
 
 app.get("/detailedreport", (req, res) => {
-  let locationName = req.query.locationName;
+  let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
@@ -124,8 +124,8 @@ app.get("/detailedreport", (req, res) => {
   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
     locationNames = null;
   } else {
-    if (!Array.isArray(locationName)) {
-      locationName = [locationName];
+    if (!Array.isArray(locationNames)) {
+      locationNames = [locationNames];
     }
   }
 
@@ -665,8 +665,6 @@ app.get("/reporting", (req, res) => {
   );
 });
 
-
-
 app.get("/getbusinessrate", (req, res) => {
    const query = `
     SELECT b.*, l.LocationId, l.LocationName
@@ -681,7 +679,6 @@ app.get("/getbusinessrate", (req, res) => {
     res.json(results);
   });
 });
-
 
 app.put("/updatebusinessrate/:id", (req, res) => {
   const id = req.params.id; // Get the id from req.params
@@ -735,31 +732,6 @@ app.put("/updatebusinessrate/:id", (req, res) => {
     }
   });
 });
-
-// app.post("/createbusinessrate", (req, res) => {
-//   const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,LocationId } =
-//     req.body;
-
-//   const query =
-//     "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,LocationId) VALUES (?, ?, ?, ?, ?,?,?)";
-
-//   misdb.query(
-//     query,
-//     [ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate,LocationId],
-//     (err, result) => {
-//       if (err) {
-//         console.error("Error creating business rate:", err);
-//         res
-//           .status(500)
-//           .json({ error: "An error occurred while creating business rate" });
-//       } else {
-//         console.log("Business rate created successfully:", result);
-//         res.status(200).json({ message: "Rate created successfully" });
-//       }
-//     }
-//   );
-// });
-
 
 app.post("/createbusinessrate", (req, res) => {
   const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId } = req.body;
@@ -1568,8 +1540,6 @@ app.post("/createstaff", (req, res) => {
     }
   );
 });
-
-
 
 app.get("/getstaff", (req, res) => {
   misdb.query("select * from tbl_nontech_staff ", (err, results) => {
