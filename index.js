@@ -5,7 +5,7 @@ const bcrypt = require("bcrypt");
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-
+//hi
 app.use(express.json());
 app.use(cors());
 
@@ -23,6 +23,13 @@ const misdb = mysql.createConnection({
   user: "root",
   password: "root",
   database: "updc_live",
+});
+const commonDB =  mysql.createConnection({
+  host: "localhost",
+  port: "3306",
+  user: "root",
+  password: "root",
+  database: "commondb",
 });
 
 
@@ -121,8 +128,8 @@ app.get("/detailedreport", (req, res) => {
 
   const queryParams = [];
 
-  if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
-    locationNames = null;
+  if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+    locationName = null;
   } else {
     if (!Array.isArray(locationNames)) {
       locationNames = [locationNames];
@@ -132,8 +139,8 @@ app.get("/detailedreport", (req, res) => {
 
   let whereClause = "";
 
-  if (locationNames) {
-    whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
+  if (locationName) {
+    whereClause = `WHERE s.locationname IN ('${locationName.join("','")}')`;
   }
 
 
@@ -304,7 +311,7 @@ app.post("/createuser", (req, res) => {
 
       data.password = hashedPassword;
       const selectQuery = "SELECT * FROM tbl_user_master WHERE user_email_id=?";
-      misdb.query(selectQuery, [data.user_email_id], (err, rows) => {
+      commonDB.query(selectQuery, [data.user_email_id], (err, rows) => {
         if (err) {
           console.error("Error checking user existence:", err);
           return res
@@ -320,8 +327,8 @@ app.post("/createuser", (req, res) => {
           .slice(0, 19)
           .replace("T", " ");
         const query1 =
-          "INSERT INTO tbl_user_master (user_email_id,first_name,middle_name,last_name,password,designation,phone_no,profile_picture,superior_name,superior_email,user_created_date,emp_id,last_pass_change,login_disabled_date,fpi_template, fpi_template_two,fpi_template_three,fpi_template_four,lang,locations,user_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        misdb.query(
+          "INSERT INTO tbl_user_master (user_email_id,first_name,middle_name,last_name,password,designation,phone_no,profile_picture,superior_name,superior_email,user_created_date,emp_id,last_pass_change,login_disabled_date,fpi_template, fpi_template_two,fpi_template_three,fpi_template_four,lang,locations,user_type,projects) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        commonDB.query(
           query1,
           [
             data.user_email_id,
@@ -345,6 +352,7 @@ app.post("/createuser", (req, res) => {
             data.lang,
             data.locations,
             data.user_type,
+            data.projects,
           ],
           (err, results) => {
             if (err) {
@@ -356,7 +364,7 @@ app.post("/createuser", (req, res) => {
             const user_id = results.insertId;
             const query2 =
               "INSERT INTO tbl_storagelevel_to_permission (user_id, sl_id) VALUES (?, ?)";
-            misdb.query(query2, [user_id, data.sl_id], (err, results) => {
+            commonDB.query(query2, [user_id, data.sl_id], (err, results) => {
               if (err) {
                 console.error("Error linking user with permission:", err);
                 return res
@@ -368,7 +376,7 @@ app.post("/createuser", (req, res) => {
               }
               const query3 =
                 "INSERT INTO tbl_ezeefile_logs (user_id, user_name, action_name, start_date, system_ip, remarks) VALUES (?, ?, ?, ?, ?, ?)";
-              misdb.query(
+              commonDB.query(
                 query3,
                 [
                   user_id,
@@ -390,7 +398,7 @@ app.post("/createuser", (req, res) => {
                   // First, perform a SELECT query to check if a row with the provided role_id exists
                   const selectQueryRole =
                     "SELECT * FROM tbl_bridge_role_to_um WHERE role_id = ?";
-                  misdb.query(
+                  commonDB.query(
                     selectQueryRole,
                     [data.role_id],
                     (err, rowsRole) => {
@@ -407,7 +415,7 @@ app.post("/createuser", (req, res) => {
                         // If a row with the role_id exists, update the user_ids
                         const updateQueryRole =
                           "UPDATE tbl_bridge_role_to_um SET user_ids = CONCAT(user_ids, ', ', ?) WHERE role_id = ?";
-                        misdb.query(
+                        commonDB.query(
                           updateQueryRole,
                           [user_id, data.role_id],
                           (err, resultsRole) => {
@@ -426,7 +434,7 @@ app.post("/createuser", (req, res) => {
                         // If a row with the role_id does not exist, insert a new row
                         const insertQueryRole =
                           "INSERT INTO tbl_bridge_role_to_um (role_id, user_ids) VALUES (?, ?)";
-                        misdb.query(
+                        commonDB.query(
                           insertQueryRole,
                           [data.role_id, user_id],
                           (err, resultsRole) => {
@@ -445,7 +453,7 @@ app.post("/createuser", (req, res) => {
                       // First, perform a SELECT query to check if the row exists
                       const selectQueryGroup =
                         "SELECT * FROM tbl_bridge_grp_to_um WHERE group_id = ?";
-                      misdb.query(
+                      commonDB.query(
                         selectQueryGroup,
                         [data.group_id],
                         (err, rowsGroup) => {
@@ -464,7 +472,7 @@ app.post("/createuser", (req, res) => {
                           if (rowsGroup.length > 0) {
                             const updateQueryGroup =
                               "UPDATE tbl_bridge_grp_to_um SET user_ids = CONCAT(user_ids, ', ', ?), roleids = CONCAT(roleids, ', ', ?) WHERE group_id = ?";
-                            misdb.query(
+                            commonDB.query(
                               updateQueryGroup,
                               [user_id, data.role_id, data.group_id],
                               (err, resultsGroup) => {
@@ -485,7 +493,7 @@ app.post("/createuser", (req, res) => {
                           } else {
                             const insertQueryGroup =
                               "INSERT INTO tbl_bridge_grp_to_um (group_id, user_ids, roleids) VALUES (?, ?, ?)";
-                            misdb.query(
+                            commonDB.query(
                               insertQueryGroup,
                               [data.group_id, user_id, data.role_id],
                               (err, resultsGroup) => {
@@ -504,19 +512,7 @@ app.post("/createuser", (req, res) => {
                               }
                             );
                           }
-                          // const mailData = {
-                          //   from: 'ezeefileadmin@cbslgroup.in',
-                          //   to: data.user_email_id,
-                          //   subject: 'Welcome to Our Platform!',
-                          //   text: `Dear ${data.first_name},\n\nWelcome to our platform! Your account has been successfully created.\nUsername: ${data.user_email_id}\nPassword: ${data.password}\n`,
-                          //   html: `<p>Dear ${data.first_name},</p><p>Welcome to our platform! Your account has been successfully created.</p><p>Username: ${data.user_email_id}</p><p>Password: ${data.password}</p>`
-                          // };
-                          // transporter.sendMail(mailData, (error, info) => {
-                          //   if (error) {
-                          //     console.error('Error sending welcome email:', error);
-                          //   } else {
-                          //     console.log('Welcome email sent:', info.response);
-                          //   }
+                          
 
                           res
                             .status(200)
@@ -542,7 +538,7 @@ app.post("/login", (req, res) => {
   const { user_email_id, password } = req.body;
   const selectQuery = "SELECT * FROM tbl_user_master WHERE user_email_id=?";
 
-  misdb.query(selectQuery, [user_email_id], (err, rows) => {
+  commonDB.query(selectQuery, [user_email_id], (err, rows) => {
     if (err) {
       console.error("Error checking user existence:", err);
       return res
@@ -564,7 +560,7 @@ app.post("/login", (req, res) => {
       if (result) {
         const updateQuery =
           "UPDATE tbl_user_master SET last_active_login = NOW() WHERE user_email_id = ?";
-        misdb.query(updateQuery, [user_email_id], (err) => {
+        commonDB.query(updateQuery, [user_email_id], (err) => {
           if (err) {
             console.error("Error updating last_active_login:", err);
             return res
@@ -580,7 +576,7 @@ app.post("/login", (req, res) => {
           LEFT JOIN tbl_user_roles r ON br.role_id = r.role_id
           WHERE u.user_email_id = ?
         `;
-          misdb.query(selectRolesQuery, [user_email_id], (err, roleRows) => {
+          commonDB.query(selectRolesQuery, [user_email_id], (err, roleRows) => {
             if (err) {
               console.error("Error fetching user role:", err);
               return res
@@ -1415,7 +1411,7 @@ app.post("/createproject", (req, res) => {
 });
 
 app.get("/getproject", (req, res) => {
-  misdb.query("select * from tbl_projectmaster ", (err, results) => {
+  commonDB.query("select * from tbl_projectmaster ", (err, results) => {
     if (err) {
       throw err;
     }
@@ -1477,6 +1473,15 @@ app.post("/createtask", (req, res) => {
       }
     }
   );
+});
+
+app.get("/commonReport", (req, res) => {
+  commonDB.query("select * from tbl_common_report ", (err, results) => {
+    if (err) {
+      throw err;
+    }
+    res.json(results);
+  });
 });
 
 app.get("/gettask", (req, res) => {
@@ -1542,13 +1547,26 @@ app.post("/createstaff", (req, res) => {
 });
 
 app.get("/getstaff", (req, res) => {
-  misdb.query("select * from tbl_nontech_staff ", (err, results) => {
+  const { locationName } = req.query;
+  
+  let query = `
+    SELECT n.*, l.LocationId, l.LocationName
+    FROM tbl_nontech_staff AS n
+    JOIN locationmaster AS l ON n.LocationId = l.LocationId
+  `;
+  
+  if (locationName) {
+    query += ` WHERE l.LocationName = ?`;
+  }
+  
+  misdb.query(query, [locationName], (err, results) => {
     if (err) {
-      throw err;
+      return res.status(500).json({ error: err.message });
     }
     res.json(results);
   });
 });
+
 
 app.put('/updatestaff/:id', (req, res) => {
   const id = req.params.id;
