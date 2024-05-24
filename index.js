@@ -24,13 +24,7 @@ const misdb = mysql.createConnection({
   password: "root",
   database: "updc_live",
 });
-const kardb = mysql.createConnection({
-  host: "localhost",
-  port: "3306",
-  user: "root",
-  password: "root",
-  database: "updc_misdb",
-});
+
 const kardb = mysql.createConnection({
   host: "localhost",
   port: "3306",
