@@ -5,7 +5,7 @@ const bcrypt = require("bcrypt");
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-
+//hi
 app.use(express.json());
 app.use(cors());
 
@@ -18,6 +18,13 @@ const mysql22 = mysql.createConnection({
   database: "ezeefile_updc",
 });
 const misdb = mysql.createConnection({
+  host: "localhost",
+  port: "3307",
+  user: "root",
+  password: "root",
+  database: "updc_live",
+});
+const kardb = mysql.createConnection({
   host: "localhost",
   port: "3306",
   user: "root",
@@ -141,7 +148,7 @@ app.get("/summaryreport", (req, res) => {
 
 
 app.get("/detailedreport", (req, res) => {
-  let locationName = req.query.locationName;
+  let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
@@ -151,8 +158,8 @@ app.get("/detailedreport", (req, res) => {
   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
     locationName = null;
   } else {
-    if (!Array.isArray(locationName)) {
-      locationName = [locationName];
+    if (!Array.isArray(locationNames)) {
+      locationNames = [locationNames];
     }
   }
 
