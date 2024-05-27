@@ -19,10 +19,10 @@ const mysql22 = mysql.createConnection({
 });
 const misdb = mysql.createConnection({
   host: "localhost",
-  port: "3307",
+  port: "3306",
   user: "root",
   password: "root",
-  database: "updc_live",
+  database: "updc_misdb",
 });
 const commonDB =  mysql.createConnection({
   host: "localhost",
