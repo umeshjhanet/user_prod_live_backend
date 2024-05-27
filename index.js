@@ -79,6 +79,44 @@ app.get("/getbusinessrate", (req, res) => {
    res.json(results);
  });
 });
+
+app.get("/updcSummary", (req, res) => {
+  const query1 = `
+    SELECT 
+      sum(t.Counting) as 'Counting', sum(Inventory) as 'Inventory', 
+      sum(DocPreparation) as 'DocPreparation', sum(guard) as 'Guard' 
+    FROM tbl_nontech_staff t`;
+  const query2 = `
+    SELECT 
+      sum(s.scanimages) as 'Scanned', sum(qcimages) as 'QC',
+      sum(flaggingimages) as 'Flagging', sum(indeximages) as 'Indexing',
+      sum(cbslqaimages) as 'CBSL_QA', sum(clientqaacceptimages) as 'Client_QC' 
+    FROM scanned s`;
+
+  
+
+  mysql22.query(query1, (err1, results1) => {
+    if (err1) {
+      console.error("Error fetching summary data:", err1);
+      res.status(500).json({ error: "Error fetching summary data" });
+      return;
+    }
+
+    // Execute the second query after the first one is complete
+    mysql22.query(query2, (err2, results2) => {
+      if (err2) {
+        console.error("Error fetching summary data:", err2);
+        res.status(500).json({ error: "Error fetching summary data" });
+        return;
+      }
+
+      // Combine both results and send the response
+      const combinedResults = { NonTech: results1, Tech: results2 };
+      res.json(combinedResults);
+    });
+  });
+});
+
 app.get("/summaryreport", (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
@@ -944,6 +982,27 @@ mysql22.query(getCsv, (error, result) => {
   });
 });
 
+app.get("/getstaff", (req, res) => {
+  const { locationName } = req.query;
+  
+  let query = `
+    SELECT n.*, l.LocationId, l.LocationName
+    FROM tbl_nontech_staff AS n
+    JOIN locationmaster AS l ON n.LocationId = l.LocationId
+  `;
+  
+  if (locationName) {
+    query += ` WHERE l.LocationName = ?`;
+  }
+  
+  mysql22.query(query, [locationName], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(results);
+  });
+});
+
 
 /////////////////////////////////////////////////////////////API FOR TELANGANA COURTS DATA////////////////////////////////////////////////////////////
 app.get("/telgetbusinessrate", (req, res) => {
@@ -966,6 +1025,42 @@ app.get('/tellocations', (req, res) => {
     res.json(results);
   }
 );
+});
+app.get("/telSummary", (req, res) => {
+  const query1 = `
+    SELECT 
+      sum(t.Counting) as 'Counting', sum(Inventory) as 'Inventory', 
+      sum(DocPreparation) as 'DocPreparation', sum(guard) as 'Guard' 
+    FROM tbl_nontech_staff t`;
+  const query2 = `
+    SELECT 
+      sum(s.scanimages) as 'Scanned', sum(qcimages) as 'QC',
+      sum(flaggingimages) as 'Flagging', sum(indeximages) as 'Indexing',
+      sum(cbslqaimages) as 'CBSL_QA', sum(clientqaacceptimages) as 'Client_QC' 
+    FROM scanned s`;
+
+  
+
+  misdb.query(query1, (err1, results1) => {
+    if (err1) {
+      console.error("Error fetching summary data:", err1);
+      res.status(500).json({ error: "Error fetching summary data" });
+      return;
+    }
+
+    // Execute the second query after the first one is complete
+    misdb.query(query2, (err2, results2) => {
+      if (err2) {
+        console.error("Error fetching summary data:", err2);
+        res.status(500).json({ error: "Error fetching summary data" });
+        return;
+      }
+
+      // Combine both results and send the response
+      const combinedResults = { NonTech: results1, Tech: results2 };
+      res.json(combinedResults);
+    });
+  });
 });
 
 app.get("/telsummaryreport", (req, res) => {
@@ -1029,6 +1124,26 @@ misdb.query(query, queryParams, (err, results) => {
 });
 });
 
+app.get("/telgetstaff", (req, res) => {
+  const { locationName } = req.query;
+  
+  let query = `
+    SELECT n.*, l.LocationId, l.LocationName
+    FROM tbl_nontech_staff AS n
+    JOIN locationmaster AS l ON n.LocationId = l.LocationId
+  `;
+  
+  if (locationName) {
+    query += ` WHERE l.LocationName = ?`;
+  }
+  
+  misdb.query(query, [locationName], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(results);
+  });
+});
 
 app.get("/teldetailedreport", (req, res) => {
 let locationName = req.query.locationName;
@@ -1847,6 +1962,26 @@ misdb.query(query, (err, results) => {
    res.json(results);
  });
 });
+app.get("/kargetstaff", (req, res) => {
+  const { locationName } = req.query;
+  
+  let query = `
+    SELECT n.*, l.LocationId, l.LocationName
+    FROM tbl_nontech_staff AS n
+    JOIN locationmaster AS l ON n.LocationId = l.LocationId
+  `;
+  
+  if (locationName) {
+    query += ` WHERE l.LocationName = ?`;
+  }
+  
+ kardb.query(query, [locationName], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(results);
+  });
+});
 
 app.get('/karlocations', (req, res) => {
   kardb.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
@@ -1854,6 +1989,43 @@ app.get('/karlocations', (req, res) => {
     res.json(results);
   }
 );
+});
+
+app.get("/karSummary", (req, res) => {
+  const query1 = `
+    SELECT 
+      sum(t.Counting) as 'Counting', sum(Inventory) as 'Inventory', 
+      sum(DocPreparation) as 'DocPreparation', sum(guard) as 'Guard' 
+    FROM tbl_nontech_staff t`;
+  const query2 = `
+    SELECT 
+      sum(s.scanimages) as 'Scanned', sum(qcimages) as 'QC',
+      sum(flaggingimages) as 'Flagging', sum(indeximages) as 'Indexing',
+      sum(cbslqaimages) as 'CBSL_QA', sum(clientqaacceptimages) as 'Client_QC' 
+    FROM scanned s`;
+
+  
+
+  kardb.query(query1, (err1, results1) => {
+    if (err1) {
+      console.error("Error fetching summary data:", err1);
+      res.status(500).json({ error: "Error fetching summary data" });
+      return;
+    }
+
+    // Execute the second query after the first one is complete
+    kardb.query(query2, (err2, results2) => {
+      if (err2) {
+        console.error("Error fetching summary data:", err2);
+        res.status(500).json({ error: "Error fetching summary data" });
+        return;
+      }
+
+      // Combine both results and send the response
+      const combinedResults = { NonTech: results1, Tech: results2 };
+      res.json(combinedResults);
+    });
+  });
 });
 
 app.get("/karsummaryreport", (req, res) => {
@@ -2963,27 +3135,6 @@ app.post("/createstaff", (req, res) => {
       }
     }
   );
-});
-
-app.get("/getstaff", (req, res) => {
-  const { locationName } = req.query;
-  
-  let query = `
-    SELECT n.*, l.LocationId, l.LocationName
-    FROM tbl_nontech_staff AS n
-    JOIN locationmaster AS l ON n.LocationId = l.LocationId
-  `;
-  
-  if (locationName) {
-    query += ` WHERE l.LocationName = ?`;
-  }
-  
-  misdb.query(query, [locationName], (err, results) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(results);
-  });
 });
 
 app.put('/updatestaff/:id', (req, res) => {
