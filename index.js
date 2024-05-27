@@ -19,10 +19,10 @@ const mysql22 = mysql.createConnection({
 });
 const misdb = mysql.createConnection({
   host: "localhost",
-  port: "3307",
+  port: "3306",
   user: "root",
   password: "root",
-  database: "updc_live",
+  database: "updc_misdb",
 });
 
 const kardb = mysql.createConnection({
@@ -142,7 +142,7 @@ app.get("/summaryreport", (req, res) => {
 
 
 app.get("/detailedreport", (req, res) => {
-  let locationNames = req.query.locationName;
+  let locationName = req.query.locationName;
   let startDate = req.query.startDate;
   let endDate = req.query.endDate;
 
@@ -152,8 +152,8 @@ app.get("/detailedreport", (req, res) => {
   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
     locationName = null;
   } else {
-    if (!Array.isArray(locationNames)) {
-      locationNames = [locationNames];
+    if (!Array.isArray(locationName)) {
+      locationName = [locationName];
     }
   }
 
