@@ -2,6 +2,9 @@ const express = require("express");
 var cors = require("cors");
 const mysql = require("mysql2");
 const bcrypt = require("bcrypt");
+const multer = require('multer');
+const xlsx = require('xlsx');
+const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
@@ -73,6 +76,59 @@ app.get('/locations', (req, res) => {
     }
   );
 });
+
+//api for upload excel
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    cb(null, file.originalname);
+  }
+});
+const upload = multer({ storage: storage });
+
+app.post("/uploadExcel", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "No file uploaded" });
+    return;
+  }
+
+  const workbook = xlsx.readFile(req.file.path);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const data = xlsx.utils.sheet_to_json(sheet);
+  const manuallyAddedFields = [
+    req.body.ProjectId,
+    req.body.ProjectName,
+    req.body.LocationID,
+    req.body.LocationName,
+   
+  ];
+
+  // Concatenate manually added fields with the data array
+  const dataWithManualFields = data.map(row => [...manuallyAddedFields, ...Object.values(row)]);
+
+  const query =
+    "INSERT INTO tbl_nontech_staff(ProjectId,ProjectName, LocationID, LocationName,StaffName,Date,Counting,Inventory,DocPreparation,Guard) VALUES ?";
+
+  mysql22.query(query, [dataWithManualFields], (err, result) => {
+    if (err) {
+      console.error("Error inserting data:", err);
+      res.status(500).json({ error: "An error occurred while inserting data" });
+    } else {
+      res.status(200).json({
+        message: "Data added successfully",
+        count: result.affectedRows,
+      });
+    }
+  });
+});
+
+
+
+//CRUD apis for business rate
+
 app.get("/getbusinessrate", (req, res) => {
   const query = `
    SELECT b.*, l.LocationId, l.LocationName
@@ -87,6 +143,120 @@ app.get("/getbusinessrate", (req, res) => {
    res.json(results);
  });
 });
+
+app.put("/updatebusinessrate/:id", (req, res) => {
+  const id = req.params.id; // Get the id from req.params
+  const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate } =
+    req.body;
+  const queryParams = [];
+  let query = `UPDATE tbl_set_business SET`;
+ 
+  // Check if each field is provided in the request body and add it to the query
+  if (ScanRate !== undefined) {
+    query += ` ScanRate = ?,`;
+    queryParams.push(ScanRate);
+  }
+  if (QcRate !== undefined) {
+    query += ` QcRate = ?,`;
+    queryParams.push(QcRate);
+  }
+  if (IndexRate !== undefined) {
+    query += ` IndexRate = ?,`;
+    queryParams.push(IndexRate);
+  }
+  if (FlagRate !== undefined) {
+    query += ` FlagRate = ?,`;
+    queryParams.push(FlagRate);
+  }
+  if (CbslQaRate !== undefined) {
+    query += ` CbslQaRate = ?,`;
+    queryParams.push(CbslQaRate);
+  }
+  if (ClientQcRate !== undefined) {
+    query += ` ClientQcRate = ?,`;
+    queryParams.push(ClientQcRate);
+  }
+ 
+  // Remove the trailing comma and add the WHERE clause
+  query = query.slice(0, -1); // Remove the last comma
+  query += ` WHERE id = ?;`; // Add the WHERE clause
+ 
+  // Push the id to queryParams array
+  queryParams.push(id);
+ 
+  // Execute the query
+  commonDB.query(query, queryParams, (err, result) => {
+    if (err) {
+      console.error("Error updating rate:", err);
+      res
+        .status(500)
+        .json({ error: "An error occurred while updating business rate" });
+    } else {
+      res.status(200).json({ message: "Rate updated successfully", id: id });
+    }
+  });
+ });
+ 
+ app.post("/createbusinessrate", (req, res) => {
+  const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId } = req.body;
+ 
+ 
+  // Ensure all rates are numbers and default to 0 if not provided
+  const scanRate = parseFloat(ScanRate) || 0;
+  const qcRate = parseFloat(QcRate) || 0;
+  const indexRate = parseFloat(IndexRate) || 0;
+  const flagRate = parseFloat(FlagRate) || 0;
+  const cbslQaRate = parseFloat(CbslQaRate) || 0;
+  const clientQcRate = parseFloat(ClientQcRate) || 0;
+  
+ 
+  const query = "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId) VALUES (?, ?, ?, ?, ?, ?, ?)";
+ 
+  commonDB.query(query, [scanRate, qcRate, indexRate, flagRate, cbslQaRate, clientQcRate, LocationId], (err, result) => {
+      if (err) {
+          console.error("Error creating business rate:", err);
+          res.status(500).json({ error: "An error occurred while creating business rate" });
+      } else {
+          console.log("Business rate created successfully:", result);
+          res.status(200).json({ message: "Rate created successfully" });
+      }
+  });
+ });
+
+//other apis
+ app.get("/telgetbusinessrate", (req, res) => {
+  const query = `
+   SELECT b.*, l.LocationId, l.LocationName
+   FROM tbl_set_business AS b
+   JOIN locationmaster AS l ON b.LocationId = l.LocationId
+ `;
+ 
+ commonDB.query(query, (err, results) => {
+   if (err) {
+     throw err;
+   }
+   res.json(results);
+ });
+});
+app.get('/tellocations', (req, res) => {
+  misdb.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  }
+);
+});
+
+app.get("/commonReport", (req, res) => {
+  commonDB.query("select * from tbl_common_report ", (err, results) => {
+    if (err) {
+      throw err;
+    }
+    res.json(results);
+  });
+});
+
+//Technical Apis for Updc
+
 app.get("/summaryreport", (req, res) => {
   let locationNames = req.query.locationName;
   let startDate = req.query.startDate;
@@ -147,7 +317,6 @@ app.get("/summaryreport", (req, res) => {
     res.json(results);
   });
 });
-
 
 app.get("/detailedreport", (req, res) => {
   let locationName = req.query.locationName;
@@ -319,7 +488,6 @@ app.get('/detailedreportcsv',  (req, res) => {
     res.end();
   });
 });
-
 
 app.get("/userdetailedreportlocationwise", (req, res) => {
   let username = req.query.username;
@@ -954,27 +1122,9 @@ mysql22.query(getCsv, (error, result) => {
 
 
 /////////////////////////////////////////////////////////////API FOR TELANGANA COURTS DATA////////////////////////////////////////////////////////////
-app.get("/telgetbusinessrate", (req, res) => {
-  const query = `
-   SELECT b.*, l.LocationId, l.LocationName
-   FROM tbl_set_business AS b
-   JOIN locationmaster AS l ON b.LocationId = l.LocationId
- `;
- 
- commonDB.query(query, (err, results) => {
-   if (err) {
-     throw err;
-   }
-   res.json(results);
- });
-});
-app.get('/tellocations', (req, res) => {
-  misdb.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  }
-);
-});
+
+
+//technical apis for telangana
 
 app.get("/telsummaryreport", (req, res) => {
 let locationNames = req.query.locationName;
@@ -1036,7 +1186,6 @@ misdb.query(query, queryParams, (err, results) => {
   res.json(results);
 });
 });
-
 
 app.get("/teldetailedreport", (req, res) => {
 let locationName = req.query.locationName;
@@ -1861,6 +2010,8 @@ app.get('/karlocations', (req, res) => {
   }
 );
 });
+
+//Technical apis for Karnataka
 
 app.get("/karsummaryreport", (req, res) => {
 let locationNames = req.query.locationName;
@@ -2725,87 +2876,7 @@ kardb.query(getCsv, (error, result) => {
 });
 
 
-
-////////////////////////////////////////////////Common
-
-app.put("/updatebusinessrate/:id", (req, res) => {
- const id = req.params.id; // Get the id from req.params
- const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate } =
-   req.body;
- const queryParams = [];
- let query = `UPDATE tbl_set_business SET`;
-
- // Check if each field is provided in the request body and add it to the query
- if (ScanRate !== undefined) {
-   query += ` ScanRate = ?,`;
-   queryParams.push(ScanRate);
- }
- if (QcRate !== undefined) {
-   query += ` QcRate = ?,`;
-   queryParams.push(QcRate);
- }
- if (IndexRate !== undefined) {
-   query += ` IndexRate = ?,`;
-   queryParams.push(IndexRate);
- }
- if (FlagRate !== undefined) {
-   query += ` FlagRate = ?,`;
-   queryParams.push(FlagRate);
- }
- if (CbslQaRate !== undefined) {
-   query += ` CbslQaRate = ?,`;
-   queryParams.push(CbslQaRate);
- }
- if (ClientQcRate !== undefined) {
-   query += ` ClientQcRate = ?,`;
-   queryParams.push(ClientQcRate);
- }
-
- // Remove the trailing comma and add the WHERE clause
- query = query.slice(0, -1); // Remove the last comma
- query += ` WHERE id = ?;`; // Add the WHERE clause
-
- // Push the id to queryParams array
- queryParams.push(id);
-
- // Execute the query
- commonDB.query(query, queryParams, (err, result) => {
-   if (err) {
-     console.error("Error updating rate:", err);
-     res
-       .status(500)
-       .json({ error: "An error occurred while updating business rate" });
-   } else {
-     res.status(200).json({ message: "Rate updated successfully", id: id });
-   }
- });
-});
-
-app.post("/createbusinessrate", (req, res) => {
- const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId } = req.body;
-
-
- // Ensure all rates are numbers and default to 0 if not provided
- const scanRate = parseFloat(ScanRate) || 0;
- const qcRate = parseFloat(QcRate) || 0;
- const indexRate = parseFloat(IndexRate) || 0;
- const flagRate = parseFloat(FlagRate) || 0;
- const cbslQaRate = parseFloat(CbslQaRate) || 0;
- const clientQcRate = parseFloat(ClientQcRate) || 0;
- 
-
- const query = "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId) VALUES (?, ?, ?, ?, ?, ?, ?)";
-
- commonDB.query(query, [scanRate, qcRate, indexRate, flagRate, cbslQaRate, clientQcRate, LocationId], (err, result) => {
-     if (err) {
-         console.error("Error creating business rate:", err);
-         res.status(500).json({ error: "An error occurred while creating business rate" });
-     } else {
-         console.log("Business rate created successfully:", result);
-         res.status(200).json({ message: "Rate created successfully" });
-     }
- });
-});
+//CRUD apis for project
 
 app.post("/createproject", (req, res) => {
   const { ProjectName } =
@@ -2872,6 +2943,8 @@ app.delete("/deleteproject/:id", (req, res) => {
   );
 });
 
+//CRUD apis for task
+
 app.post("/createtask", (req, res) => {
   const { TaskName } =
     req.body;
@@ -2894,15 +2967,6 @@ app.post("/createtask", (req, res) => {
       }
     }
   );
-});
-
-app.get("/commonReport", (req, res) => {
-  commonDB.query("select * from tbl_common_report ", (err, results) => {
-    if (err) {
-      throw err;
-    }
-    res.json(results);
-  });
 });
 
 app.get("/gettask", (req, res) => {
@@ -2946,26 +3010,29 @@ app.delete("/deletetask/:id", (req, res) => {
   );
 });
 
+//CRUD apis for staff
+
 app.post("/createstaff", (req, res) => {
-  const { ProjectId, LocationId, Date, StaffName, TaskName, Volume } = req.body;
+  const { ProjectId, ProjectName, LocationID, LocationName, Date, StaffName, Counting, Inventory, DocPreparation, Guard } = req.body;
 
   const query =
-    "INSERT INTO tbl_nontech_staff (ProjectId, LocationId, Date, StaffName, TaskName, Volume) VALUES (?, ?, ?, ?, ?, ?)";
+    "INSERT INTO tbl_nontech_staff (ProjectId, ProjectName, LocationId, LocationName, Date, StaffName, Counting, Inventory, DocPreparation, Guard) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-  commonDB.query(
+  mysql22.query(
     query,
-    [ProjectId, LocationId, Date, StaffName, TaskName, Volume],
+    [ProjectId, ProjectName, LocationID, LocationName, Date, StaffName, Counting || '0', Inventory || '0', DocPreparation || '0', Guard || '0'],
     (err, result) => {
       if (err) {
         console.error("Error creating non-tech staff:", err);
         res.status(500).json({ error: "An error occurred while creating non-tech staff" });
       } else {
-        console.log("Non-tech staff created successfully:", result);
+        
         res.status(200).json({ message: "Non-tech staff created successfully" });
       }
     }
   );
 });
+
 
 app.get("/getstaff", (req, res) => {
   const { locationName } = req.query;
@@ -3019,6 +3086,8 @@ app.delete("/deletestaff/:id", (req, res) => {
     }
   );
 });
+
+//create user all apis with login
 
 app.post("/createuser", (req, res) => {
   const data = req.body;
@@ -3457,7 +3526,7 @@ app.get("/summaryreportcummulative", (req, res) => {
       return;
     }
 
-    commonDB.query(nonTechQuery, (err, nonTechResults) => {
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
       if (err) {
         console.error("Error fetching non-tech summary data:", err);
         res.status(500).json({ error: "Error fetching non-tech summary data" });
@@ -3473,7 +3542,6 @@ app.get("/summaryreportcummulative", (req, res) => {
     });
   });
 });
-
 
 app.get("/detailedreportcummulative", (req, res) => {
   let locationName = req.query.locationName;
@@ -3522,30 +3590,28 @@ app.get("/detailedreportcummulative", (req, res) => {
 
   let nonTechWhereClause = "";
   if (locationName) {
-    nonTechWhereClause = `WHERE lm.LocationName IN ('${locationName.join("','")}')`;
+    nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
   }
 
   let nonTechDateClause = "";
   if (startDate && endDate) {
     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-    nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
+    nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
   }
 
   const nonTechQuery = `
   SELECT 
-    lm.LocationName AS 'LocationName',
-    SUM(ns.Counting) AS 'Counting', 
-    SUM(ns.Inventory) AS 'Inventory',
-    SUM(ns.DocPreparation) AS 'DocPreparation',
-    SUM(ns.Guard) AS 'Guard'
+    LocationName AS 'LocationName',
+    SUM(Counting) AS 'Counting', 
+    SUM(Inventory) AS 'Inventory',
+    SUM(DocPreparation) AS 'DocPreparation',
+    SUM(Guard) AS 'Guard'
   FROM 
-    tbl_nontech_staff ns
-  INNER JOIN 
-    locationmaster lm ON ns.LocationID = lm.LocationID
+    tbl_nontech_staff 
   ${nonTechWhereClause}
   ${nonTechDateClause}
   GROUP BY
-    lm.LocationName;`;
+    LocationName;`;
 
   mysql22.query(scannedQuery, (err, scannedResults) => {
     if (err) {
@@ -3554,42 +3620,34 @@ app.get("/detailedreportcummulative", (req, res) => {
       return;
     }
 
-    commonDB.query(nonTechQuery, (err, nonTechResults) => {
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
       if (err) {
         console.error("Error fetching non-tech summary data:", err);
         res.status(500).json({ error: "Error fetching non-tech summary data" });
         return;
       }
 
-      // Normalize location names for easier matching
-      const normalizeName = name => name.toLowerCase().trim();
-
-      // Create a map for non-tech data keyed by normalized location name
+      // Convert nonTechResults to a map for easier lookup
       const nonTechMap = {};
       nonTechResults.forEach(nonTech => {
-        const normalizedNonTechName = normalizeName(nonTech.LocationName);
-        nonTechMap[normalizedNonTechName] = nonTech;
+        nonTechMap[normalizeName(nonTech.LocationName)] = nonTech;
       });
 
       // Merge the results
       const mergedResults = scannedResults.map(scanned => {
         const normalizedScannedName = normalizeName(scanned.LocationName);
-        
-        // Attempt to find the closest matching non-tech location
-        const matchingNonTech = Object.keys(nonTechMap).find(nonTechName => 
-          normalizedScannedName.includes(nonTechName) || nonTechName.includes(normalizedScannedName)
-        );
-        
+        const matchingNonTech = nonTechMap[normalizedScannedName];
+
         if (matchingNonTech) {
-          return { ...scanned, ...nonTechMap[matchingNonTech] };
+          return { ...scanned, ...matchingNonTech };
         }
-        
+
         return scanned;
       });
 
       // Add non-tech locations that don't have corresponding scanned data
       Object.keys(nonTechMap).forEach(nonTechName => {
-        if (!mergedResults.find(result => normalizeName(result.LocationName).includes(nonTechName))) {
+        if (!mergedResults.find(result => normalizeName(result.LocationName) === nonTechName)) {
           mergedResults.push(nonTechMap[nonTechName]);
         }
       });
@@ -3598,6 +3656,10 @@ app.get("/detailedreportcummulative", (req, res) => {
     });
   });
 });
+
+function normalizeName(name) {
+  return name.toLowerCase().trim();
+}
 
 app.get("/alldetailedreportlocationwise", (req, res) => {
   let locationName = req.query.locationName;
@@ -3721,7 +3783,7 @@ app.get("/alldetailedreportlocationwise", (req, res) => {
 
   const nonTechQuery = `
     SELECT 
-      locationmaster.LocationName AS 'locationName',
+      LocationName AS 'locationName',
       tbl_nontech_staff.StaffName AS 'user_type',
       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
       SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
@@ -3729,11 +3791,9 @@ app.get("/alldetailedreportlocationwise", (req, res) => {
       SUM(tbl_nontech_staff.Guard) AS 'Guard'
     FROM 
       tbl_nontech_staff
-    INNER JOIN 
-      locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
     ${whereClause} AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
     GROUP BY 
-      locationmaster.LocationName, 
+      LocationName, 
       tbl_nontech_staff.StaffName;
   `;
 
@@ -3744,7 +3804,7 @@ app.get("/alldetailedreportlocationwise", (req, res) => {
       return;
     }
 
-    commonDB.query(nonTechQuery, (err, nonTechResults) => {
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
       if (err) {
         console.error("Error fetching non-tech summary data:", err);
         res.status(500).json({ error: "Error fetching non-tech summary data" });
@@ -3897,7 +3957,7 @@ app.get("/alluserdetailedreportlocationwise", (req, res) => {
   
   const nonTechQuery = `
     SELECT 
-      locationmaster.LocationName AS 'locationName',
+      LocationName AS 'locationName',
       tbl_nontech_staff.StaffName AS 'user_type',
       DATE_FORMAT(DATE, '%Y-%m-%d') AS Date,
       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
@@ -3906,14 +3966,13 @@ app.get("/alluserdetailedreportlocationwise", (req, res) => {
       SUM(tbl_nontech_staff.Guard) AS 'Guard'
     FROM 
       tbl_nontech_staff
-    INNER JOIN 
-      locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
+    
     WHERE
-      locationmaster.LocationName IN ('${locationName.join("','")}') 
+      LocationName IN ('${locationName.join("','")}') 
       AND tbl_nontech_staff.StaffName = '${username}' 
       AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
     GROUP BY 
-      locationmaster.LocationName, 
+      LocationName, 
       tbl_nontech_staff.StaffName,
       DATE
     ORDER BY 
@@ -3927,7 +3986,7 @@ app.get("/alluserdetailedreportlocationwise", (req, res) => {
       return;
     }
 
-    commonDB.query(nonTechQuery, (err, nonTechResults) => {
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
       if (err) {
         console.error("Error fetching non-tech summary data:", err);
         res.status(500).json({ error: "Error fetching non-tech summary data" });
@@ -3991,30 +4050,28 @@ app.get('/detailedreportcummulativecsv', (req, res) => {
 
       let nonTechWhereClause = "";
   if (locationNames) {
-    nonTechWhereClause = `WHERE lm.LocationName IN ('${locationNames.join("','")}')`;
+    nonTechWhereClause = `WHERE LocationName IN ('${locationNames.join("','")}')`;
   }
 
   let nonTechDateClause = "";
   if (startDate && endDate) {
     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-    nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
+    nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
   }
 
   const nonTechQuery = `
     SELECT 
-      lm.LocationName AS 'LocationName',
-      COALESCE(SUM(ns.Counting), 0) AS 'Counting', 
-      COALESCE(SUM(ns.Inventory), 0) AS 'Inventory',
-      COALESCE(SUM(ns.DocPreparation), 0) AS 'DocPreparation',
-      COALESCE(SUM(ns.Guard), 0) AS 'Guard'
+      LocationName AS 'LocationName',
+      COALESCE(SUM(Counting), 0) AS 'Counting', 
+      COALESCE(SUM(Inventory), 0) AS 'Inventory',
+      COALESCE(SUM(DocPreparation), 0) AS 'DocPreparation',
+      COALESCE(SUM(Guard), 0) AS 'Guard'
     FROM 
       tbl_nontech_staff ns
-    INNER JOIN 
-      locationmaster lm ON ns.LocationID = lm.LocationID 
       ${nonTechWhereClause}
       ${nonTechDateClause}
     GROUP BY
-      lm.LocationName`;
+      LocationName`;
 
   mysql22.query(getCsv, (error, scannedResult) => {
     if (error) {
@@ -4023,7 +4080,7 @@ app.get('/detailedreportcummulativecsv', (req, res) => {
       return;
     }
 
-    commonDB.query(nonTechQuery, (error, nonTechResult) => {
+    mysql22.query(nonTechQuery, (error, nonTechResult) => {
       if (error) {
         console.error("Error occurred when exporting CSV:", error);
         res.status(500).json({ error: "An error occurred while exporting the CSV file" });
@@ -4177,7 +4234,7 @@ app.get("/alldetailedreportlocationwisecsv", (req, res) => {
 
   let nonTechWhereClause = "";
   if (locationName) {
-    nonTechWhereClause = `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')`;
+    nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
   }
 
   let nonTechDateClause = "";
@@ -4188,7 +4245,7 @@ app.get("/alldetailedreportlocationwisecsv", (req, res) => {
 
   const nonTechQuery = `
   SELECT 
-    locationmaster.LocationName AS 'locationName',
+    LocationName AS 'locationName',
     tbl_nontech_staff.StaffName AS 'user_type',
     SUM(tbl_nontech_staff.Counting) AS 'Counting', 
     SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
@@ -4196,12 +4253,11 @@ app.get("/alldetailedreportlocationwisecsv", (req, res) => {
     SUM(tbl_nontech_staff.Guard) AS 'Guard'
   FROM 
     tbl_nontech_staff
-  INNER JOIN 
-    locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
+  
   ${nonTechWhereClause}
   ${nonTechDateClause}
   GROUP BY 
-    locationmaster.LocationName, 
+    LocationName, 
     tbl_nontech_staff.StaffName;
   `;
 
@@ -4212,7 +4268,7 @@ app.get("/alldetailedreportlocationwisecsv", (req, res) => {
       return;
     }
 
-    commonDB.query(nonTechQuery, (error, nonTechResults) => {
+    mysql22.query(nonTechQuery, (error, nonTechResults) => {
       if (error) {
         console.error("Error occurred when exporting CSV:", error);
         res.status(500).json({ error: "An error occurred while exporting the CSV file" });
@@ -4421,7 +4477,7 @@ ORDER BY
 
 let nonTechWhereClause = "";
 if (locationName) {
-  nonTechWhereClause = `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')`;
+  nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
 }
 
 let nonTechDateClause = "";
@@ -4433,7 +4489,7 @@ if (startDate && endDate) {
 
 const nonTechQuery = `
     SELECT 
-      locationmaster.LocationName AS 'locationName',
+      LocationName AS 'locationName',
       tbl_nontech_staff.StaffName AS 'user_type',
       DATE_FORMAT(date, '%Y-%m-%d') AS date,
       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
@@ -4442,13 +4498,11 @@ const nonTechQuery = `
       SUM(tbl_nontech_staff.Guard) AS 'Guard'
     FROM 
       tbl_nontech_staff
-    INNER JOIN 
-      locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
       ${nonTechWhereClause}
       AND tbl_nontech_staff.StaffName = '${username}' 
       ${nonTechDateClause}
     GROUP BY 
-      locationmaster.LocationName, 
+      LocationName, 
       tbl_nontech_staff.StaffName,
       DATE
     ORDER BY 
@@ -4462,7 +4516,7 @@ const nonTechQuery = `
       return;
     }
 
-    commonDB.query(nonTechQuery, (err, nonTechResults) => {
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
       if (err) {
         console.error("Error fetching non-tech summary data:", err);
         res.status(500).json({ error: "Error fetching non-tech summary data" });
@@ -4561,13 +4615,13 @@ app.get("/summaryreportnontech", (req, res) => {
 
   let nonTechWhereClause = "";
   if (locationNames) {
-    nonTechWhereClause = `WHERE lm.LocationName IN ('${locationNames.join("','")}')`;
+    nonTechWhereClause = `WHERE LocationName IN ('${locationNames.join("','")}')`;
   }
 
   let nonTechDateClause = "";
   if (startDate && endDate) {
     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-    nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
+    nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
   }
 
   const nonTechQuery = `
@@ -4581,7 +4635,7 @@ app.get("/summaryreportnontech", (req, res) => {
     ${nonTechDateClause};
   `;
 
-  commonDB.query(nonTechQuery, (err, nonTechResults) => {
+  mysql22.query(nonTechQuery, (err, nonTechResults) => {
     if (err) {
       console.error("Error fetching non-tech summary data:", err);
       res.status(500).json({ error: "Error fetching non-tech summary data" });
@@ -4612,34 +4666,33 @@ app.get("/detailedreportcummulativenontech", (req, res) => {
     // Prepare WHERE clause for filtering by locationName
     let nonTechWhereClause = "";
     if (locationName) {
-      nonTechWhereClause = `WHERE lm.LocationName IN ('${locationName.join("','")}')`;
+      nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
     }
   
     // Prepare WHERE clause for filtering by startDate and endDate
     let nonTechDateClause = "";
     if (startDate && endDate) {
       nonTechDateClause = nonTechWhereClause ? ` AND` : `WHERE`;
-      nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
+      nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
     }
   
     const nonTechQuery = `
     SELECT 
-      lm.LocationName AS 'LocationName',
-      SUM(ns.Counting) AS 'Counting', 
-      SUM(ns.Inventory) AS 'Inventory',
-      SUM(ns.DocPreparation) AS 'DocPreparation',
-      SUM(ns.Guard) AS 'Guard'
+      LocationName AS 'LocationName',
+      SUM(Counting) AS 'Counting', 
+      SUM(Inventory) AS 'Inventory',
+      SUM(DocPreparation) AS 'DocPreparation',
+      SUM(Guard) AS 'Guard'
     FROM 
       tbl_nontech_staff ns
-    INNER JOIN 
-      locationmaster lm ON ns.LocationID = lm.LocationID
+    
     ${nonTechWhereClause}
     ${nonTechDateClause}
     GROUP BY
-      lm.LocationName;`;
+      LocationName;`;
 
     // Execute the query
-    commonDB.query(nonTechQuery, (err, nonTechResults) => {
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
       if (err) {
         console.error("Error fetching non-tech summary data:", err);
         res.status(500).json({ error: "Error fetching non-tech summary data" });
@@ -4670,11 +4723,11 @@ app.get("/alldetailedreportlocationwisenontech", (req, res) => {
   }
 
   // Prepare the WHERE clause based on locationName
-  const whereClause = locationName ? `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')` : '';
+  const whereClause = locationName ? `WHERE LocationName IN ('${locationName.join("','")}')` : '';
 
   const nonTechQuery = `
     SELECT 
-      locationmaster.LocationName AS 'locationName',
+      LocationName AS 'locationName',
       tbl_nontech_staff.StaffName AS 'user_type',
       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
       SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
@@ -4682,15 +4735,14 @@ app.get("/alldetailedreportlocationwisenontech", (req, res) => {
       SUM(tbl_nontech_staff.Guard) AS 'Guard'
     FROM 
       tbl_nontech_staff
-    INNER JOIN 
-      locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
+    
     ${whereClause} AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
     GROUP BY 
-      locationmaster.LocationName, 
+      LocationName, 
       tbl_nontech_staff.StaffName;
   `;
 
-  commonDB.query(nonTechQuery, (err, nonTechResults) => {
+  mysql22.query(nonTechQuery, (err, nonTechResults) => {
     if (err) {
       console.error("Error fetching non-tech summary data:", err);
       res.status(500).json({ error: "Error fetching non-tech summary data" });
@@ -4717,7 +4769,7 @@ app.get("/alluserdetailedreportlocationwisenontech", (req, res) => {
 
   const nonTechQuery = `
     SELECT 
-      locationmaster.LocationName AS 'locationName',
+      LocationName AS 'locationName',
       tbl_nontech_staff.StaffName AS 'user_type',
       DATE_FORMAT(DATE, '%Y-%m-%d') AS Date,
       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
@@ -4726,14 +4778,13 @@ app.get("/alluserdetailedreportlocationwisenontech", (req, res) => {
       SUM(tbl_nontech_staff.Guard) AS 'Guard'
     FROM 
       tbl_nontech_staff
-    INNER JOIN 
-      locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
+    
     WHERE
-      locationmaster.LocationName IN ('${locationName.join("','")}') 
+      LocationName IN ('${locationName.join("','")}') 
       AND tbl_nontech_staff.StaffName = '${username}' 
       AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
     GROUP BY 
-      locationmaster.LocationName, 
+      LocationName, 
       tbl_nontech_staff.StaffName,
       DATE
     ORDER BY 
@@ -4741,7 +4792,7 @@ app.get("/alluserdetailedreportlocationwisenontech", (req, res) => {
   `;
 
   
-    commonDB.query(nonTechQuery, (err, nonTechResults) => {
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
       if (err) {
         console.error("Error fetching non-tech summary data:", err);
         res.status(500).json({ error: "Error fetching non-tech summary data" });
@@ -4768,32 +4819,30 @@ app.get('/detailedreportcummulativecsvnontech', (req, res) => {
 
   let nonTechWhereClause = "";
   if (locationNames) {
-      nonTechWhereClause = `WHERE lm.LocationName IN ('${locationNames.join("','")}')`;
+      nonTechWhereClause = `WHERE LocationName IN ('${locationNames.join("','")}')`;
   }
 
   let nonTechDateClause = "";
   if (startDate && endDate) {
       nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-      nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
+      nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
   }
 
   const nonTechQuery = `
     SELECT 
-      lm.LocationName AS 'LocationName',
-      COALESCE(SUM(ns.Counting), 0) AS 'Counting', 
-      COALESCE(SUM(ns.Inventory), 0) AS 'Inventory',
-      COALESCE(SUM(ns.DocPreparation), 0) AS 'DocPreparation',
-      COALESCE(SUM(ns.Guard), 0) AS 'Guard'
+      LocationName AS 'LocationName',
+      COALESCE(SUM(Counting), 0) AS 'Counting', 
+      COALESCE(SUM(Inventory), 0) AS 'Inventory',
+      COALESCE(SUM(DocPreparation), 0) AS 'DocPreparation',
+      COALESCE(SUM(Guard), 0) AS 'Guard'
     FROM 
       tbl_nontech_staff ns
-    INNER JOIN 
-      locationmaster lm ON ns.LocationID = lm.LocationID 
       ${nonTechWhereClause}
       ${nonTechDateClause}
     GROUP BY
-      lm.LocationName`;
+      LocationName`;
 
-  commonDB.query(nonTechQuery, (error, nonTechResult) => {
+  mysql22.query(nonTechQuery, (error, nonTechResult) => {
       if (error) {
           console.error("Error occurred when exporting CSV:", error);
           res.status(500).json({ error: "An error occurred while exporting the CSV file" });
@@ -4835,7 +4884,7 @@ app.get("/alldetailedreportlocationwisecsvnontech", (req, res) => {
 
   let nonTechWhereClause = "";
   if (locationName) {
-    nonTechWhereClause = `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')`;
+    nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
   }
 
   let nonTechDateClause = "";
@@ -4846,7 +4895,7 @@ app.get("/alldetailedreportlocationwisecsvnontech", (req, res) => {
 
   const nonTechQuery = `
   SELECT 
-    locationmaster.LocationName AS 'locationName',
+    LocationName AS 'locationName',
     tbl_nontech_staff.StaffName AS 'user_type',
     SUM(tbl_nontech_staff.Counting) AS 'Counting', 
     SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
@@ -4854,12 +4903,11 @@ app.get("/alldetailedreportlocationwisecsvnontech", (req, res) => {
     SUM(tbl_nontech_staff.Guard) AS 'Guard'
   FROM 
     tbl_nontech_staff
-  INNER JOIN 
-    locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
+  
   ${nonTechWhereClause}
   ${nonTechDateClause}
   GROUP BY 
-    locationmaster.LocationName, 
+    LocationName, 
     tbl_nontech_staff.StaffName;
   `;
 
@@ -4896,7 +4944,7 @@ app.get("/alldetailedreportlocationwisecsvnontech", (req, res) => {
   });
 });
 
-app.get("/alluserdetailedreportlocationwisecsv", (req, res, next) => {
+app.get("/alluserdetailedreportlocationwisecsvnontech", (req, res, next) => {
   let username = req.query.username;
   let locationName = req.query.locationName;
   let startDate = req.query.startDate;
@@ -4913,7 +4961,7 @@ app.get("/alluserdetailedreportlocationwisecsv", (req, res, next) => {
 
   let nonTechWhereClause = "";
   if (locationName) {
-    nonTechWhereClause = `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')`;
+    nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
   }
 
   let nonTechDateClause = "";
@@ -4924,7 +4972,7 @@ app.get("/alluserdetailedreportlocationwisecsv", (req, res, next) => {
 
   const nonTechQuery = `
     SELECT 
-      locationmaster.LocationName AS 'locationName',
+      LocationName AS 'locationName',
       tbl_nontech_staff.StaffName AS 'user_type',
       DATE_FORMAT(tbl_nontech_staff.Date, '%Y-%m-%d') AS date,
       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
@@ -4933,20 +4981,19 @@ app.get("/alluserdetailedreportlocationwisecsv", (req, res, next) => {
       SUM(tbl_nontech_staff.Guard) AS 'Guard'
     FROM 
       tbl_nontech_staff
-    INNER JOIN 
-      locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
+    
     ${nonTechWhereClause}
     AND tbl_nontech_staff.StaffName = '${username}' 
     ${nonTechDateClause}
     GROUP BY 
-      locationmaster.LocationName, 
+      LocationName, 
       tbl_nontech_staff.StaffName,
       tbl_nontech_staff.Date
     ORDER BY 
       tbl_nontech_staff.Date ASC;
   `;
 
-  commonDB.query(nonTechQuery, (err, nonTechResults) => {
+  mysql22.query(nonTechQuery, (err, nonTechResults) => {
     if (err) {
       console.error("Error fetching non-tech summary data:", err);
       res.status(500).json({ error: "Error fetching non-tech summary data" });
