@@ -1120,11 +1120,35 @@ mysql22.query(getCsv, (error, result) => {
   });
 });
 
+app.get("/getstaff", (req, res) => {
+  const { locationName } = req.query;
+  
+  let query = `
+    SELECT n.*, l.LocationId, l.LocationName
+    FROM tbl_nontech_staff AS n
+    JOIN locationmaster AS l ON n.LocationId = l.LocationId
+  `;
+  
+  if (locationName) {
+    query += ` WHERE l.LocationName = ?`;
+  }
+  
+  mysql22.query(query, [locationName], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(results);
+  });
+});
+
 
 /////////////////////////////////////////////////////////////API FOR TELANGANA COURTS DATA////////////////////////////////////////////////////////////
 
 
 //technical apis for telangana
+
+
+
 
 app.get("/telsummaryreport", (req, res) => {
 let locationNames = req.query.locationName;
@@ -2001,6 +2025,26 @@ commonDB.query(query, (err, results) => {
    }
    res.json(results);
  });
+});
+app.get("/kargetstaff", (req, res) => {
+  const { locationName } = req.query;
+  
+  let query = `
+    SELECT n.*, l.LocationId, l.LocationName
+    FROM tbl_nontech_staff AS n
+    JOIN locationmaster AS l ON n.LocationId = l.LocationId
+  `;
+  
+  if (locationName) {
+    query += ` WHERE l.LocationName = ?`;
+  }
+  
+ kardb.query(query, [locationName], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(results);
+  });
 });
 
 app.get('/karlocations', (req, res) => {
