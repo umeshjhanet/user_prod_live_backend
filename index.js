@@ -2,6 +2,9 @@ const express = require("express");
 var cors = require("cors");
 const mysql = require("mysql2");
 const bcrypt = require("bcrypt");
+const multer = require('multer');
+const xlsx = require('xlsx');
+const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
@@ -73,6 +76,59 @@ app.get('/locations', (req, res) => {
     }
   );
 });
+
+//api for upload excel
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    cb(null, file.originalname);
+  }
+});
+const upload = multer({ storage: storage });
+
+app.post("/uploadExcel", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "No file uploaded" });
+    return;
+  }
+
+  const workbook = xlsx.readFile(req.file.path);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const data = xlsx.utils.sheet_to_json(sheet);
+  const manuallyAddedFields = [
+    req.body.ProjectId,
+    req.body.ProjectName,
+    req.body.LocationID,
+    req.body.LocationName,
+   
+  ];
+
+  // Concatenate manually added fields with the data array
+  const dataWithManualFields = data.map(row => [...manuallyAddedFields, ...Object.values(row)]);
+
+  const query =
+    "INSERT INTO tbl_nontech_staff(ProjectId,ProjectName, LocationID, LocationName,StaffName,Date,Counting,Inventory,DocPreparation,Guard) VALUES ?";
+
+  mysql22.query(query, [dataWithManualFields], (err, result) => {
+    if (err) {
+      console.error("Error inserting data:", err);
+      res.status(500).json({ error: "An error occurred while inserting data" });
+    } else {
+      res.status(200).json({
+        message: "Data added successfully",
+        count: result.affectedRows,
+      });
+    }
+  });
+});
+
+
+
+//CRUD apis for business rate
+
 app.get("/getbusinessrate", (req, res) => {
   const query = `
    SELECT b.*, l.LocationId, l.LocationName
@@ -88,42 +144,118 @@ app.get("/getbusinessrate", (req, res) => {
  });
 });
 
-app.get("/updcSummary", (req, res) => {
-  const query1 = `
-    SELECT 
-      sum(t.Counting) as 'Counting', sum(Inventory) as 'Inventory', 
-      sum(DocPreparation) as 'DocPreparation', sum(guard) as 'Guard' 
-    FROM tbl_nontech_staff t`;
-  const query2 = `
-    SELECT 
-      sum(s.scanimages) as 'Scanned', sum(qcimages) as 'QC',
-      sum(flaggingimages) as 'Flagging', sum(indeximages) as 'Indexing',
-      sum(cbslqaimages) as 'CBSL_QA', sum(clientqaacceptimages) as 'Client_QC' 
-    FROM scanned s`;
-
-  
-
-  mysql22.query(query1, (err1, results1) => {
-    if (err1) {
-      console.error("Error fetching summary data:", err1);
-      res.status(500).json({ error: "Error fetching summary data" });
-      return;
+app.put("/updatebusinessrate/:id", (req, res) => {
+  const id = req.params.id; // Get the id from req.params
+  const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate } =
+    req.body;
+  const queryParams = [];
+  let query = `UPDATE tbl_set_business SET`;
+ 
+  // Check if each field is provided in the request body and add it to the query
+  if (ScanRate !== undefined) {
+    query += ` ScanRate = ?,`;
+    queryParams.push(ScanRate);
+  }
+  if (QcRate !== undefined) {
+    query += ` QcRate = ?,`;
+    queryParams.push(QcRate);
+  }
+  if (IndexRate !== undefined) {
+    query += ` IndexRate = ?,`;
+    queryParams.push(IndexRate);
+  }
+  if (FlagRate !== undefined) {
+    query += ` FlagRate = ?,`;
+    queryParams.push(FlagRate);
+  }
+  if (CbslQaRate !== undefined) {
+    query += ` CbslQaRate = ?,`;
+    queryParams.push(CbslQaRate);
+  }
+  if (ClientQcRate !== undefined) {
+    query += ` ClientQcRate = ?,`;
+    queryParams.push(ClientQcRate);
+  }
+ 
+  // Remove the trailing comma and add the WHERE clause
+  query = query.slice(0, -1); // Remove the last comma
+  query += ` WHERE id = ?;`; // Add the WHERE clause
+ 
+  // Push the id to queryParams array
+  queryParams.push(id);
+ 
+  // Execute the query
+  commonDB.query(query, queryParams, (err, result) => {
+    if (err) {
+      console.error("Error updating rate:", err);
+      res
+        .status(500)
+        .json({ error: "An error occurred while updating business rate" });
+    } else {
+      res.status(200).json({ message: "Rate updated successfully", id: id });
     }
-
-    // Execute the second query after the first one is complete
-    mysql22.query(query2, (err2, results2) => {
-      if (err2) {
-        console.error("Error fetching summary data:", err2);
-        res.status(500).json({ error: "Error fetching summary data" });
-        return;
+  });
+ });
+ 
+ app.post("/createbusinessrate", (req, res) => {
+  const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId } = req.body;
+ 
+ 
+  // Ensure all rates are numbers and default to 0 if not provided
+  const scanRate = parseFloat(ScanRate) || 0;
+  const qcRate = parseFloat(QcRate) || 0;
+  const indexRate = parseFloat(IndexRate) || 0;
+  const flagRate = parseFloat(FlagRate) || 0;
+  const cbslQaRate = parseFloat(CbslQaRate) || 0;
+  const clientQcRate = parseFloat(ClientQcRate) || 0;
+  
+ 
+  const query = "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId) VALUES (?, ?, ?, ?, ?, ?, ?)";
+ 
+  commonDB.query(query, [scanRate, qcRate, indexRate, flagRate, cbslQaRate, clientQcRate, LocationId], (err, result) => {
+      if (err) {
+          console.error("Error creating business rate:", err);
+          res.status(500).json({ error: "An error occurred while creating business rate" });
+      } else {
+          console.log("Business rate created successfully:", result);
+          res.status(200).json({ message: "Rate created successfully" });
       }
+  });
+ });
 
-      // Combine both results and send the response
-      const combinedResults = { NonTech: results1, Tech: results2 };
-      res.json(combinedResults);
-    });
+//other apis
+ app.get("/telgetbusinessrate", (req, res) => {
+  const query = `
+   SELECT b.*, l.LocationId, l.LocationName
+   FROM tbl_set_business AS b
+   JOIN locationmaster AS l ON b.LocationId = l.LocationId
+ `;
+ 
+ commonDB.query(query, (err, results) => {
+   if (err) {
+     throw err;
+   }
+   res.json(results);
+ });
+});
+app.get('/tellocations', (req, res) => {
+  misdb.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  }
+);
+});
+
+app.get("/commonReport", (req, res) => {
+  commonDB.query("select * from tbl_common_report ", (err, results) => {
+    if (err) {
+      throw err;
+    }
+    res.json(results);
   });
 });
+
+//Technical Apis for Updc
 
 app.get("/summaryreport", (req, res) => {
   let locationNames = req.query.locationName;
@@ -185,7 +317,6 @@ app.get("/summaryreport", (req, res) => {
     res.json(results);
   });
 });
-
 
 app.get("/detailedreport", (req, res) => {
   let locationName = req.query.locationName;
@@ -357,7 +488,6 @@ app.get('/detailedreportcsv',  (req, res) => {
     res.end();
   });
 });
-
 
 app.get("/userdetailedreportlocationwise", (req, res) => {
   let username = req.query.username;
@@ -1013,63 +1143,12 @@ app.get("/getstaff", (req, res) => {
 
 
 /////////////////////////////////////////////////////////////API FOR TELANGANA COURTS DATA////////////////////////////////////////////////////////////
-app.get("/telgetbusinessrate", (req, res) => {
-  const query = `
-   SELECT b.*, l.LocationId, l.LocationName
-   FROM tbl_set_business AS b
-   JOIN locationmaster AS l ON b.LocationId = l.LocationId
- `;
- 
- misdb.query(query, (err, results) => {
-   if (err) {
-     throw err;
-   }
-   res.json(results);
- });
-});
-app.get('/tellocations', (req, res) => {
-  misdb.query("SELECT LocationID, LocationName from locationmaster;", (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  }
-);
-});
-app.get("/telSummary", (req, res) => {
-  const query1 = `
-    SELECT 
-      sum(t.Counting) as 'Counting', sum(Inventory) as 'Inventory', 
-      sum(DocPreparation) as 'DocPreparation', sum(guard) as 'Guard' 
-    FROM tbl_nontech_staff t`;
-  const query2 = `
-    SELECT 
-      sum(s.scanimages) as 'Scanned', sum(qcimages) as 'QC',
-      sum(flaggingimages) as 'Flagging', sum(indeximages) as 'Indexing',
-      sum(cbslqaimages) as 'CBSL_QA', sum(clientqaacceptimages) as 'Client_QC' 
-    FROM scanned s`;
 
-  
 
-  misdb.query(query1, (err1, results1) => {
-    if (err1) {
-      console.error("Error fetching summary data:", err1);
-      res.status(500).json({ error: "Error fetching summary data" });
-      return;
-    }
+//technical apis for telangana
 
-    // Execute the second query after the first one is complete
-    misdb.query(query2, (err2, results2) => {
-      if (err2) {
-        console.error("Error fetching summary data:", err2);
-        res.status(500).json({ error: "Error fetching summary data" });
-        return;
-      }
 
-      // Combine both results and send the response
-      const combinedResults = { NonTech: results1, Tech: results2 };
-      res.json(combinedResults);
-    });
-  });
-});
+
 
 app.get("/telsummaryreport", (req, res) => {
 let locationNames = req.query.locationName;
@@ -1130,27 +1209,6 @@ misdb.query(query, queryParams, (err, results) => {
   }
   res.json(results);
 });
-});
-
-app.get("/telgetstaff", (req, res) => {
-  const { locationName } = req.query;
-  
-  let query = `
-    SELECT n.*, l.LocationId, l.LocationName
-    FROM tbl_nontech_staff AS n
-    JOIN locationmaster AS l ON n.LocationId = l.LocationId
-  `;
-  
-  if (locationName) {
-    query += ` WHERE l.LocationName = ?`;
-  }
-  
-  misdb.query(query, [locationName], (err, results) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(results);
-  });
 });
 
 app.get("/teldetailedreport", (req, res) => {
@@ -1997,42 +2055,7 @@ app.get('/karlocations', (req, res) => {
 );
 });
 
-app.get("/karSummary", (req, res) => {
-  const query1 = `
-    SELECT 
-      sum(t.Counting) as 'Counting', sum(Inventory) as 'Inventory', 
-      sum(DocPreparation) as 'DocPreparation', sum(guard) as 'Guard' 
-    FROM tbl_nontech_staff t`;
-  const query2 = `
-    SELECT 
-      sum(s.scanimages) as 'Scanned', sum(qcimages) as 'QC',
-      sum(flaggingimages) as 'Flagging', sum(indeximages) as 'Indexing',
-      sum(cbslqaimages) as 'CBSL_QA', sum(clientqaacceptimages) as 'Client_QC' 
-    FROM scanned s`;
-
-  
-
-  kardb.query(query1, (err1, results1) => {
-    if (err1) {
-      console.error("Error fetching summary data:", err1);
-      res.status(500).json({ error: "Error fetching summary data" });
-      return;
-    }
-
-    // Execute the second query after the first one is complete
-    kardb.query(query2, (err2, results2) => {
-      if (err2) {
-        console.error("Error fetching summary data:", err2);
-        res.status(500).json({ error: "Error fetching summary data" });
-        return;
-      }
-
-      // Combine both results and send the response
-      const combinedResults = { NonTech: results1, Tech: results2 };
-      res.json(combinedResults);
-    });
-  });
-});
+//Technical apis for Karnataka
 
 app.get("/karsummaryreport", (req, res) => {
 let locationNames = req.query.locationName;
@@ -2897,87 +2920,7 @@ kardb.query(getCsv, (error, result) => {
 });
 
 
-
-////////////////////////////////////////////////Common
-
-app.put("/updatebusinessrate/:id", (req, res) => {
- const id = req.params.id; // Get the id from req.params
- const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate } =
-   req.body;
- const queryParams = [];
- let query = `UPDATE tbl_set_business SET`;
-
- // Check if each field is provided in the request body and add it to the query
- if (ScanRate !== undefined) {
-   query += ` ScanRate = ?,`;
-   queryParams.push(ScanRate);
- }
- if (QcRate !== undefined) {
-   query += ` QcRate = ?,`;
-   queryParams.push(QcRate);
- }
- if (IndexRate !== undefined) {
-   query += ` IndexRate = ?,`;
-   queryParams.push(IndexRate);
- }
- if (FlagRate !== undefined) {
-   query += ` FlagRate = ?,`;
-   queryParams.push(FlagRate);
- }
- if (CbslQaRate !== undefined) {
-   query += ` CbslQaRate = ?,`;
-   queryParams.push(CbslQaRate);
- }
- if (ClientQcRate !== undefined) {
-   query += ` ClientQcRate = ?,`;
-   queryParams.push(ClientQcRate);
- }
-
- // Remove the trailing comma and add the WHERE clause
- query = query.slice(0, -1); // Remove the last comma
- query += ` WHERE id = ?;`; // Add the WHERE clause
-
- // Push the id to queryParams array
- queryParams.push(id);
-
- // Execute the query
- commonDB.query(query, queryParams, (err, result) => {
-   if (err) {
-     console.error("Error updating rate:", err);
-     res
-       .status(500)
-       .json({ error: "An error occurred while updating business rate" });
-   } else {
-     res.status(200).json({ message: "Rate updated successfully", id: id });
-   }
- });
-});
-
-app.post("/createbusinessrate", (req, res) => {
- const { ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId } = req.body;
-
-
- // Ensure all rates are numbers and default to 0 if not provided
- const scanRate = parseFloat(ScanRate) || 0;
- const qcRate = parseFloat(QcRate) || 0;
- const indexRate = parseFloat(IndexRate) || 0;
- const flagRate = parseFloat(FlagRate) || 0;
- const cbslQaRate = parseFloat(CbslQaRate) || 0;
- const clientQcRate = parseFloat(ClientQcRate) || 0;
- 
-
- const query = "INSERT INTO tbl_set_business (ScanRate, QcRate, IndexRate, FlagRate, CbslQaRate, ClientQcRate, LocationId) VALUES (?, ?, ?, ?, ?, ?, ?)";
-
- commonDB.query(query, [scanRate, qcRate, indexRate, flagRate, cbslQaRate, clientQcRate, LocationId], (err, result) => {
-     if (err) {
-         console.error("Error creating business rate:", err);
-         res.status(500).json({ error: "An error occurred while creating business rate" });
-     } else {
-         console.log("Business rate created successfully:", result);
-         res.status(200).json({ message: "Rate created successfully" });
-     }
- });
-});
+//CRUD apis for project
 
 app.post("/createproject", (req, res) => {
   const { ProjectName } =
@@ -3044,6 +2987,8 @@ app.delete("/deleteproject/:id", (req, res) => {
   );
 });
 
+//CRUD apis for task
+
 app.post("/createtask", (req, res) => {
   const { TaskName } =
     req.body;
@@ -3066,15 +3011,6 @@ app.post("/createtask", (req, res) => {
       }
     }
   );
-});
-
-app.get("/commonReport", (req, res) => {
-  commonDB.query("select * from tbl_common_report ", (err, results) => {
-    if (err) {
-      throw err;
-    }
-    res.json(results);
-  });
 });
 
 app.get("/gettask", (req, res) => {
@@ -3118,26 +3054,29 @@ app.delete("/deletetask/:id", (req, res) => {
   );
 });
 
+//CRUD apis for staff
+
 app.post("/createstaff", (req, res) => {
-  const { ProjectId, LocationId, Date, StaffName, TaskName, Volume } = req.body;
+  const { ProjectId, ProjectName, LocationID, LocationName, Date, StaffName, Counting, Inventory, DocPreparation, Guard } = req.body;
 
   const query =
-    "INSERT INTO tbl_nontech_staff (ProjectId, LocationId, Date, StaffName, TaskName, Volume) VALUES (?, ?, ?, ?, ?, ?)";
+    "INSERT INTO tbl_nontech_staff (ProjectId, ProjectName, LocationId, LocationName, Date, StaffName, Counting, Inventory, DocPreparation, Guard) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-  commonDB.query(
+  mysql22.query(
     query,
-    [ProjectId, LocationId, Date, StaffName, TaskName, Volume],
+    [ProjectId, ProjectName, LocationID, LocationName, Date, StaffName, Counting || '0', Inventory || '0', DocPreparation || '0', Guard || '0'],
     (err, result) => {
       if (err) {
         console.error("Error creating non-tech staff:", err);
         res.status(500).json({ error: "An error occurred while creating non-tech staff" });
       } else {
-        console.log("Non-tech staff created successfully:", result);
+        
         res.status(200).json({ message: "Non-tech staff created successfully" });
       }
     }
   );
 });
+
 
 app.get("/getstaff", (req, res) => {
   const { locationName } = req.query;
@@ -3191,6 +3130,8 @@ app.delete("/deletestaff/:id", (req, res) => {
     }
   );
 });
+
+//create user all apis with login
 
 app.post("/createuser", (req, res) => {
   const data = req.body;
@@ -3552,1605 +3493,1583 @@ app.post("/login", (req, res) => {
 });
 
 
-//Updc All Cummulative Api
+/////////////Updc All Cummulative Api///////////////////////
 
-// app.get("/summaryreportcummulative", (req, res) => {
-//   let locationNames = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate;
+app.get("/summaryreportcummulative", (req, res) => {
+  let locationNames = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate;
 
-//   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
-//     locationNames = null;
-//   } else {
-//     if (!Array.isArray(locationNames)) {
-//       locationNames = [locationNames];
-//     }
-//   }
+  if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
+    locationNames = null;
+  } else {
+    if (!Array.isArray(locationNames)) {
+      locationNames = [locationNames];
+    }
+  }
 
-//   let whereClause = "";
-//   if (locationNames) {
-//     whereClause = `WHERE locationname IN ('${locationNames.join("','")}')`;
-//   }
+  let whereClause = "";
+  if (locationNames) {
+    whereClause = `WHERE locationname IN ('${locationNames.join("','")}')`;
+  }
 
-//   let dateClause = "";
-//   if (startDate && endDate) {
-//     dateClause = whereClause ? `AND` : `WHERE`;
-//     dateClause += ` (inventorydate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR scandate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR qcdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR flaggingdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR indexdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR cbslqadate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR exportdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
-//   }
+  let dateClause = "";
+  if (startDate && endDate) {
+    dateClause = whereClause ? `AND` : `WHERE`;
+    dateClause += ` (inventorydate BETWEEN '${startDate}' AND '${endDate}'
+                OR scandate BETWEEN '${startDate}' AND '${endDate}'
+                OR qcdate BETWEEN '${startDate}' AND '${endDate}'
+                OR flaggingdate BETWEEN '${startDate}' AND '${endDate}'
+                OR indexdate BETWEEN '${startDate}' AND '${endDate}'
+                OR cbslqadate BETWEEN '${startDate}' AND '${endDate}'
+                OR exportdate BETWEEN '${startDate}' AND '${endDate}'
+                OR clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
+                OR digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
+  }
 
-//   const scannedQuery = `
-//   SELECT 
-//   sum(scanimages) as 'Scanned',
-//   sum(qcimages) as 'QC',
-//   sum(flaggingimages) as 'Flagging',
-//   sum(indeximages) as 'Indexing',
-//   sum(cbslqaimages) as 'CBSL_QA',
-//   sum(clientqaacceptimages) as 'Client_QC' 
-//   FROM scanned s
-//   ${whereClause}
-//   ${dateClause}
-//   ;`;
+  const scannedQuery = `
+  SELECT 
+  sum(scanimages) as 'Scanned',
+  sum(qcimages) as 'QC',
+  sum(flaggingimages) as 'Flagging',
+  sum(indeximages) as 'Indexing',
+  sum(cbslqaimages) as 'CBSL_QA',
+  sum(clientqaacceptimages) as 'Client_QC' 
+  FROM scanned s
+  ${whereClause}
+  ${dateClause}
+  ;`;
 
-//   let nonTechWhereClause = "";
-//   if (locationNames) {
-//     nonTechWhereClause = `WHERE lm.LocationName IN ('${locationNames.join("','")}')`;
-//   }
+  let nonTechWhereClause = "";
+  if (locationNames) {
+    nonTechWhereClause = `WHERE lm.LocationName IN ('${locationNames.join("','")}')`;
+  }
 
-//   let nonTechDateClause = "";
-//   if (startDate && endDate) {
-//     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//     nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//   }
+  let nonTechDateClause = "";
+  if (startDate && endDate) {
+    nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+    nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
+  }
 
-//   const nonTechQuery = `
-//   SELECT 
-//   sum(Counting) as 'Counting', 
-//   sum(Inventory) as 'Inventory',
-//   sum(DocPreparation) as 'DocPreparation',
-//   sum(Guard) as 'Guard'
-//   FROM tbl_nontech_staff ns
-//   ${nonTechWhereClause}
-//   ${nonTechDateClause}
-//   ;
-//   `;
+  const nonTechQuery = `
+  SELECT 
+  sum(Counting) as 'Counting', 
+  sum(Inventory) as 'Inventory',
+  sum(DocPreparation) as 'DocPreparation',
+  sum(Guard) as 'Guard'
+  FROM tbl_nontech_staff ns
+  ${nonTechWhereClause}
+  ${nonTechDateClause}
+  ;
+  `;
 
-//   mysql22.query(scannedQuery, (err, scannedResults) => {
-//     if (err) {
-//       console.error("Error fetching scanned summary data:", err);
-//       res.status(500).json({ error: "Error fetching scanned summary data" });
-//       return;
-//     }
+  mysql22.query(scannedQuery, (err, scannedResults) => {
+    if (err) {
+      console.error("Error fetching scanned summary data:", err);
+      res.status(500).json({ error: "Error fetching scanned summary data" });
+      return;
+    }
 
-//     mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//       if (err) {
-//         console.error("Error fetching non-tech summary data:", err);
-//         res.status(500).json({ error: "Error fetching non-tech summary data" });
-//         return;
-//       }
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
+      if (err) {
+        console.error("Error fetching non-tech summary data:", err);
+        res.status(500).json({ error: "Error fetching non-tech summary data" });
+        return;
+      }
 
-//       const result = {
-//         ...scannedResults[0],
-//         ...nonTechResults[0]
-//       };
+      const result = {
+        ...scannedResults[0],
+        ...nonTechResults[0]
+      };
 
-//       res.json(result);
-//     });
-//   });
-// });
+      res.json(result);
+    });
+  });
+});
 
+app.get("/detailedreportcummulative", (req, res) => {
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate;
 
-// app.get("/detailedreportcummulative", (req, res) => {
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate;
+  if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+    locationName = null;
+  } else {
+    if (!Array.isArray(locationName)) {
+      locationName = [locationName];
+    }
+  }
 
-//   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
-//     locationName = null;
-//   } else {
-//     if (!Array.isArray(locationName)) {
-//       locationName = [locationName];
-//     }
-//   }
+  let whereClause = "";
+  if (locationName) {
+    whereClause = `WHERE s.locationname IN ('${locationName.join("','")}')`;
+  }
 
-//   let whereClause = "";
-//   if (locationName) {
-//     whereClause = `WHERE s.locationname IN ('${locationName.join("','")}')`;
-//   }
+  let dateClause = "";
+  if (startDate && endDate) {
+    dateClause = whereClause ? `AND` : `WHERE`;
+    dateClause += ` (s.scandate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.qcdate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.flaggingdate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.indexdate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.cbslqadate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}')`;
+  }
 
-//   let dateClause = "";
-//   if (startDate && endDate) {
-//     dateClause = whereClause ? `AND` : `WHERE`;
-//     dateClause += ` (s.scandate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.qcdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.flaggingdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.indexdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.cbslqadate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}')`;
-//   }
+  const scannedQuery = `
+  SELECT 
+    s.locationname AS 'LocationName',
+    SUM(s.scanimages) AS 'Scanned',
+    SUM(s.qcimages) AS 'QC',
+    SUM(s.indeximages) AS 'Indexing',
+    SUM(s.flaggingimages) AS 'Flagging',
+    SUM(s.cbslqaimages) AS 'CBSL_QA',
+    SUM(s.clientqaacceptimages) AS 'Client_QC'
+  FROM 
+    scanned s
+  ${whereClause}
+  ${dateClause}
+  GROUP BY 
+    s.locationname;`;
 
-//   const scannedQuery = `
-//   SELECT 
-//     s.locationname AS 'LocationName',
-//     SUM(s.scanimages) AS 'Scanned',
-//     SUM(s.qcimages) AS 'QC',
-//     SUM(s.indeximages) AS 'Indexing',
-//     SUM(s.flaggingimages) AS 'Flagging',
-//     SUM(s.cbslqaimages) AS 'CBSL_QA',
-//     SUM(s.clientqaacceptimages) AS 'Client_QC'
-//   FROM 
-//     scanned s
-//   ${whereClause}
-//   ${dateClause}
-//   GROUP BY 
-//     s.locationname;`;
+  let nonTechWhereClause = "";
+  if (locationName) {
+    nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
+  }
 
-//   let nonTechWhereClause = "";
-//   if (locationName) {
-//     nonTechWhereClause = `WHERE lm.LocationName IN ('${locationName.join("','")}')`;
-//   }
+  let nonTechDateClause = "";
+  if (startDate && endDate) {
+    nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+    nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
+  }
 
-//   let nonTechDateClause = "";
-//   if (startDate && endDate) {
-//     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//     nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//   }
+  const nonTechQuery = `
+  SELECT 
+    LocationName AS 'LocationName',
+    SUM(Counting) AS 'Counting', 
+    SUM(Inventory) AS 'Inventory',
+    SUM(DocPreparation) AS 'DocPreparation',
+    SUM(Guard) AS 'Guard'
+  FROM 
+    tbl_nontech_staff 
+  ${nonTechWhereClause}
+  ${nonTechDateClause}
+  GROUP BY
+    LocationName;`;
 
-//   const nonTechQuery = `
-//   SELECT 
-//     lm.LocationName AS 'LocationName',
-//     SUM(ns.Counting) AS 'Counting', 
-//     SUM(ns.Inventory) AS 'Inventory',
-//     SUM(ns.DocPreparation) AS 'DocPreparation',
-//     SUM(ns.Guard) AS 'Guard'
-//   FROM 
-//     tbl_nontech_staff ns
-//   INNER JOIN 
-//     locationmaster lm ON ns.LocationID = lm.LocationID
-//   ${nonTechWhereClause}
-//   ${nonTechDateClause}
-//   GROUP BY
-//     lm.LocationName;`;
+  mysql22.query(scannedQuery, (err, scannedResults) => {
+    if (err) {
+      console.error("Error fetching scanned summary data:", err);
+      res.status(500).json({ error: "Error fetching scanned summary data" });
+      return;
+    }
 
-//   mysql22.query(scannedQuery, (err, scannedResults) => {
-//     if (err) {
-//       console.error("Error fetching scanned summary data:", err);
-//       res.status(500).json({ error: "Error fetching scanned summary data" });
-//       return;
-//     }
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
+      if (err) {
+        console.error("Error fetching non-tech summary data:", err);
+        res.status(500).json({ error: "Error fetching non-tech summary data" });
+        return;
+      }
 
-//    mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//       if (err) {
-//         console.error("Error fetching non-tech summary data:", err);
-//         res.status(500).json({ error: "Error fetching non-tech summary data" });
-//         return;
-//       }
+      // Convert nonTechResults to a map for easier lookup
+      const nonTechMap = {};
+      nonTechResults.forEach(nonTech => {
+        nonTechMap[normalizeName(nonTech.LocationName)] = nonTech;
+      });
 
-//       // Normalize location names for easier matching
-//       const normalizeName = name => name.toLowerCase().trim();
+      // Merge the results
+      const mergedResults = scannedResults.map(scanned => {
+        const normalizedScannedName = normalizeName(scanned.LocationName);
+        const matchingNonTech = nonTechMap[normalizedScannedName];
 
-//       // Create a map for non-tech data keyed by normalized location name
-//       const nonTechMap = {};
-//       nonTechResults.forEach(nonTech => {
-//         const normalizedNonTechName = normalizeName(nonTech.LocationName);
-//         nonTechMap[normalizedNonTechName] = nonTech;
-//       });
+        if (matchingNonTech) {
+          return { ...scanned, ...matchingNonTech };
+        }
 
-//       // Merge the results
-//       const mergedResults = scannedResults.map(scanned => {
-//         const normalizedScannedName = normalizeName(scanned.LocationName);
-        
-//         // Attempt to find the closest matching non-tech location
-//         const matchingNonTech = Object.keys(nonTechMap).find(nonTechName => 
-//           normalizedScannedName.includes(nonTechName) || nonTechName.includes(normalizedScannedName)
-//         );
-        
-//         if (matchingNonTech) {
-//           return { ...scanned, ...nonTechMap[matchingNonTech] };
-//         }
-        
-//         return scanned;
-//       });
+        return scanned;
+      });
 
-//       // Add non-tech locations that don't have corresponding scanned data
-//       Object.keys(nonTechMap).forEach(nonTechName => {
-//         if (!mergedResults.find(result => normalizeName(result.LocationName).includes(nonTechName))) {
-//           mergedResults.push(nonTechMap[nonTechName]);
-//         }
-//       });
+      // Add non-tech locations that don't have corresponding scanned data
+      Object.keys(nonTechMap).forEach(nonTechName => {
+        if (!mergedResults.find(result => normalizeName(result.LocationName) === nonTechName)) {
+          mergedResults.push(nonTechMap[nonTechName]);
+        }
+      });
 
-//       res.json(mergedResults);
-//     });
-//   });
-// });
+      res.json(mergedResults);
+    });
+  });
+});
 
-// app.get("/alldetailedreportlocationwise", (req, res) => {
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+function normalizeName(name) {
+  return name.toLowerCase().trim();
+}
 
-//   console.log("Received locationName:", locationName); // Log locationName
+app.get("/alldetailedreportlocationwise", (req, res) => {
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
 
-//   // Ensure locationName is an array if provided
-//   if (!Array.isArray(locationName)) {
-//     locationName = [locationName];
-//   }
+  console.log("Received locationName:", locationName); // Log locationName
 
-//   let whereClause = "";
+  // Ensure locationName is an array if provided
+  if (!Array.isArray(locationName)) {
+    locationName = [locationName];
+  }
+
+  let whereClause = "";
   
-//   // Build WHERE clause if locationName is provided
-//   if (locationName.length > 0 && locationName[0]) {
-//     whereClause = `WHERE locationname IN ('${locationName}')`;
-//   }
+  // Build WHERE clause if locationName is provided
+  if (locationName.length > 0 && locationName[0]) {
+    whereClause = `WHERE locationname IN ('${locationName}')`;
+  }
 
-//   const scannedQuery = `
-//     SELECT 
-//       scanned.locationname AS 'locationName',
-//       scanned.user AS 'user_type',
-//       SUM(CASE WHEN user_type = 'scan' THEN scanimages ELSE 0 END) AS Scanned,
-//       SUM(CASE WHEN user_type = 'qc' THEN qcimages ELSE 0 END) AS QC,
-//       SUM(CASE WHEN user_type = 'flagging' THEN flaggingimages ELSE 0 END) AS Flagging,
-//       SUM(CASE WHEN user_type = 'index' THEN indeximages ELSE 0 END) AS Indexing,
-//       SUM(CASE WHEN user_type = 'cbslqa' THEN cbslqaimages ELSE 0 END) AS CBSL_QA,
-//       SUM(CASE WHEN user_type = 'clientqaaccept' THEN clientqaacceptimages ELSE 0 END) AS Client_QC
-//     FROM 
-//       (
-//         SELECT 
-//           scanned.locationname, 
-//           scanuser AS user, 
-//           scanimages, 
-//           0 AS qcimages, 
-//           0 AS flaggingimages, 
-//           0 AS indeximages, 
-//           0 AS cbslqaimages,
-//           0 AS clientqaacceptimages,
-//           'scan' AS user_type
-//         FROM 
-//           scanned
-//         ${whereClause} AND DATE(scandate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//           scanned.locationname, 
-//           qcuser AS user, 
-//           0 AS scanimages, 
-//           qcimages, 
-//           0 AS flaggingimages, 
-//           0 AS indeximages, 
-//           0 AS cbslqaimages,
-//           0 AS clientqaacceptimages,
-//           'qc' AS user_type
-//         FROM 
-//           scanned
-//         ${whereClause} AND DATE(qcdate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//           scanned.locationname, 
-//           flagginguser AS user, 
-//           0 AS scanimages, 
-//           0 AS qcimages, 
-//           flaggingimages, 
-//           0 AS indeximages, 
-//           0 AS cbslqaimages,
-//           0 AS clientqaacceptimages,
-//           'flagging' AS user_type
-//         FROM 
-//           scanned
-//         ${whereClause} AND DATE(flaggingdate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//           scanned.locationname, 
-//           indexuser AS user, 
-//           0 AS scanimages, 
-//           0 AS qcimages, 
-//           0 AS flaggingimages, 
-//           indeximages, 
-//           0 AS cbslqaimages,
-//           0 AS clientqaacceptimages,
-//           'index' AS user_type
-//         FROM 
-//           scanned
-//         ${whereClause} AND DATE(indexdate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//           scanned.locationname, 
-//           cbslqauser AS user, 
-//           0 AS scanimages, 
-//           0 AS qcimages, 
-//           0 AS flaggingimages, 
-//           0 AS indeximages, 
-//           cbslqaimages, 
-//           0 AS clientqaacceptimages,
-//           'cbslqa' AS user_type
-//         FROM 
-//           scanned
-//         ${whereClause} AND DATE(cbslqadate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//           scanned.locationname, 
-//           clientqaacceptuser AS user, 
-//           0 AS scanimages, 
-//           0 AS qcimages, 
-//           0 AS flaggingimages, 
-//           0 AS indeximages, 
-//           0 AS cbslqaimages, 
-//           clientqaacceptimages, 
-//           'clientqaaccept' AS user_type
-//         FROM 
-//           scanned
-//         ${whereClause} AND DATE(clientqaacceptdate) BETWEEN '${startDate}' AND '${endDate}'
-//       ) AS scanned
-//     GROUP BY 
-//       scanned.locationname, 
-//       scanned.user;
-//   `;
+  const scannedQuery = `
+    SELECT 
+      scanned.locationname AS 'locationName',
+      scanned.user AS 'user_type',
+      SUM(CASE WHEN user_type = 'scan' THEN scanimages ELSE 0 END) AS Scanned,
+      SUM(CASE WHEN user_type = 'qc' THEN qcimages ELSE 0 END) AS QC,
+      SUM(CASE WHEN user_type = 'flagging' THEN flaggingimages ELSE 0 END) AS Flagging,
+      SUM(CASE WHEN user_type = 'index' THEN indeximages ELSE 0 END) AS Indexing,
+      SUM(CASE WHEN user_type = 'cbslqa' THEN cbslqaimages ELSE 0 END) AS CBSL_QA,
+      SUM(CASE WHEN user_type = 'clientqaaccept' THEN clientqaacceptimages ELSE 0 END) AS Client_QC
+    FROM 
+      (
+        SELECT 
+          scanned.locationname, 
+          scanuser AS user, 
+          scanimages, 
+          0 AS qcimages, 
+          0 AS flaggingimages, 
+          0 AS indeximages, 
+          0 AS cbslqaimages,
+          0 AS clientqaacceptimages,
+          'scan' AS user_type
+        FROM 
+          scanned
+        ${whereClause} AND DATE(scandate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+          scanned.locationname, 
+          qcuser AS user, 
+          0 AS scanimages, 
+          qcimages, 
+          0 AS flaggingimages, 
+          0 AS indeximages, 
+          0 AS cbslqaimages,
+          0 AS clientqaacceptimages,
+          'qc' AS user_type
+        FROM 
+          scanned
+        ${whereClause} AND DATE(qcdate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+          scanned.locationname, 
+          flagginguser AS user, 
+          0 AS scanimages, 
+          0 AS qcimages, 
+          flaggingimages, 
+          0 AS indeximages, 
+          0 AS cbslqaimages,
+          0 AS clientqaacceptimages,
+          'flagging' AS user_type
+        FROM 
+          scanned
+        ${whereClause} AND DATE(flaggingdate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+          scanned.locationname, 
+          indexuser AS user, 
+          0 AS scanimages, 
+          0 AS qcimages, 
+          0 AS flaggingimages, 
+          indeximages, 
+          0 AS cbslqaimages,
+          0 AS clientqaacceptimages,
+          'index' AS user_type
+        FROM 
+          scanned
+        ${whereClause} AND DATE(indexdate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+          scanned.locationname, 
+          cbslqauser AS user, 
+          0 AS scanimages, 
+          0 AS qcimages, 
+          0 AS flaggingimages, 
+          0 AS indeximages, 
+          cbslqaimages, 
+          0 AS clientqaacceptimages,
+          'cbslqa' AS user_type
+        FROM 
+          scanned
+        ${whereClause} AND DATE(cbslqadate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+          scanned.locationname, 
+          clientqaacceptuser AS user, 
+          0 AS scanimages, 
+          0 AS qcimages, 
+          0 AS flaggingimages, 
+          0 AS indeximages, 
+          0 AS cbslqaimages, 
+          clientqaacceptimages, 
+          'clientqaaccept' AS user_type
+        FROM 
+          scanned
+        ${whereClause} AND DATE(clientqaacceptdate) BETWEEN '${startDate}' AND '${endDate}'
+      ) AS scanned
+    GROUP BY 
+      scanned.locationname, 
+      scanned.user;
+  `;
 
-//   const nonTechQuery = `
-//     SELECT 
-//       locationmaster.LocationName AS 'locationName',
-//       tbl_nontech_staff.StaffName AS 'user_type',
-//       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
-//       SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
-//       SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
-//       SUM(tbl_nontech_staff.Guard) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff
-//     INNER JOIN 
-//       locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
-//     ${whereClause} AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
-//     GROUP BY 
-//       locationmaster.LocationName, 
-//       tbl_nontech_staff.StaffName;
-//   `;
+  const nonTechQuery = `
+    SELECT 
+      LocationName AS 'locationName',
+      tbl_nontech_staff.StaffName AS 'user_type',
+      SUM(tbl_nontech_staff.Counting) AS 'Counting', 
+      SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
+      SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
+      SUM(tbl_nontech_staff.Guard) AS 'Guard'
+    FROM 
+      tbl_nontech_staff
+    ${whereClause} AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
+    GROUP BY 
+      LocationName, 
+      tbl_nontech_staff.StaffName;
+  `;
 
-//   mysql22.query(scannedQuery, (err, scannedResults) => {
-//     if (err) {
-//       console.error("Error fetching scanned summary data:", err);
-//       res.status(500).json({ error: "Error fetching scanned summary data" });
-//       return;
-//     }
+  mysql22.query(scannedQuery, (err, scannedResults) => {
+    if (err) {
+      console.error("Error fetching scanned summary data:", err);
+      res.status(500).json({ error: "Error fetching scanned summary data" });
+      return;
+    }
 
-//     mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//       if (err) {
-//         console.error("Error fetching non-tech summary data:", err);
-//         res.status(500).json({ error: "Error fetching non-tech summary data" });
-//         return;
-//       }
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
+      if (err) {
+        console.error("Error fetching non-tech summary data:", err);
+        res.status(500).json({ error: "Error fetching non-tech summary data" });
+        return;
+      }
 
-//       const combinedResults = [...scannedResults, ...nonTechResults];
-//       res.json(combinedResults);
-//     });
-//   });
-// });
+      const combinedResults = [...scannedResults, ...nonTechResults];
+      res.json(combinedResults);
+    });
+  });
+});
 
-// app.get("/alluserdetailedreportlocationwise", (req, res) => {
-//   let username = req.query.username;
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+app.get("/alluserdetailedreportlocationwise", (req, res) => {
+  let username = req.query.username;
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
 
-//   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
-//     locationName = null;
-//   } else {
-//     if (!Array.isArray(locationName)) {
-//       locationName = [locationName];
-//     }
-//   }
+  if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+    locationName = null;
+  } else {
+    if (!Array.isArray(locationName)) {
+      locationName = [locationName];
+    }
+  }
 
-//   let whereClause = "";
+  let whereClause = "";
 
-//   if (locationName) {
-//     whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
-//   }
+  if (locationName) {
+    whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
+  }
   
-//   const query = `
-//     SELECT 
-//       locationname AS 'locationName',
-//       user AS 'user_type',
-//       DATE_FORMAT(DATE, '%Y-%m-%d') AS Date,
-//       lotno,
-//       SUM(CASE WHEN user_type = 'scan' THEN scanimages ELSE 0 END) AS Scanned,
-//       SUM(CASE WHEN user_type = 'qc' THEN qcimages ELSE 0 END) AS QC,
-//       SUM(CASE WHEN user_type = 'flagging' THEN flaggingimages ELSE 0 END) AS Flagging,
-//       SUM(CASE WHEN user_type = 'index' THEN indeximages ELSE 0 END) AS Indexing,
-//       SUM(CASE WHEN user_type = 'cbslqa' THEN cbslqaimages ELSE 0 END) AS CBSL_QA,
-//       SUM(CASE WHEN user_type = 'clientqaaccept' THEN clientqaacceptimages ELSE 0 END) AS Client_QC
-//     FROM 
-//       (
-//         SELECT 
-//             locationname, 
-//             scanuser AS user, 
-//             scandate AS DATE, 
-//             lotno, 
-//             scanimages, 
-//             0 AS qcimages, 
-//             0 AS flaggingimages, 
-//             0 AS indeximages, 
-//             0 AS cbslqaimages,
-//             0 AS clientqaacceptimages,
-//             'scan' AS user_type
-//         FROM 
-//             scanned
-//         ${whereClause} AND scanuser = '${username}' AND DATE(scandate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//             locationname, 
-//             qcuser AS user, 
-//             qcdate AS DATE, 
-//             lotno, 
-//             0 AS scanimages, 
-//             qcimages, 
-//             0 AS flaggingimages, 
-//             0 AS indeximages, 
-//             0 AS cbslqaimages,
-//             0 AS clientqaacceptimages,
-//             'qc' AS user_type
-//         FROM 
-//             scanned
-//         ${whereClause} AND qcuser = '${username}' AND DATE(qcdate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//             locationname, 
-//             flagginguser AS user, 
-//             flaggingdate AS DATE, 
-//             lotno, 
-//             0 AS scanimages, 
-//             0 AS qcimages, 
-//             flaggingimages, 
-//             0 AS indeximages, 
-//             0 AS cbslqaimages,
-//             0 AS clientqaacceptimages,
-//             'flagging' AS user_type
-//         FROM 
-//             scanned
-//         ${whereClause} AND flagginguser = '${username}' AND DATE(flaggingdate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//             locationname, 
-//             indexuser AS user, 
-//             indexdate AS DATE, 
-//             lotno, 
-//             0 AS scanimages, 
-//             0 AS qcimages, 
-//             0 AS flaggingimages, 
-//             indeximages, 
-//             0 AS cbslqaimages,
-//             0 AS clientqaacceptimages,
-//             'index' AS user_type
-//         FROM 
-//             scanned
-//         ${whereClause} AND indexuser = '${username}' AND DATE(indexdate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//             locationname, 
-//             cbslqauser AS user, 
-//             cbslqadate AS DATE, 
-//             lotno, 
-//             0 AS scanimages, 
-//             0 AS qcimages, 
-//             0 AS flaggingimages, 
-//             0 AS indeximages, 
-//             cbslqaimages, 
-//             0 AS clientqaacceptimages,
-//             'cbslqa' AS user_type
-//         FROM 
-//             scanned
-//         ${whereClause} AND cbslqauser = '${username}' AND DATE(cbslqadate) BETWEEN '${startDate}' AND '${endDate}'
-//         UNION ALL
-//         SELECT 
-//             locationname, 
-//             clientqaacceptuser AS user, 
-//             clientqaacceptdate AS DATE, 
-//             lotno, 
-//             0 AS scanimages, 
-//             0 AS qcimages, 
-//             0 AS flaggingimages, 
-//             0 AS indeximages, 
-//             0 AS cbslqaimages, 
-//             clientqaacceptimages, 
-//             'clientqaaccept' AS user_type
-//         FROM 
-//             scanned
-//         ${whereClause} AND clientqaacceptuser = '${username}' AND DATE(clientqaacceptdate) BETWEEN '${startDate}' AND '${endDate}'
-//     ) AS subquery
-//     GROUP BY 
-//       locationname, 
-//       user, 
-//       DATE
-//     ORDER BY 
-//       DATE ASC;
-//   `;
+  const query = `
+    SELECT 
+      locationname AS 'locationName',
+      user AS 'user_type',
+      DATE_FORMAT(DATE, '%Y-%m-%d') AS Date,
+      lotno,
+      SUM(CASE WHEN user_type = 'scan' THEN scanimages ELSE 0 END) AS Scanned,
+      SUM(CASE WHEN user_type = 'qc' THEN qcimages ELSE 0 END) AS QC,
+      SUM(CASE WHEN user_type = 'flagging' THEN flaggingimages ELSE 0 END) AS Flagging,
+      SUM(CASE WHEN user_type = 'index' THEN indeximages ELSE 0 END) AS Indexing,
+      SUM(CASE WHEN user_type = 'cbslqa' THEN cbslqaimages ELSE 0 END) AS CBSL_QA,
+      SUM(CASE WHEN user_type = 'clientqaaccept' THEN clientqaacceptimages ELSE 0 END) AS Client_QC
+    FROM 
+      (
+        SELECT 
+            locationname, 
+            scanuser AS user, 
+            scandate AS DATE, 
+            lotno, 
+            scanimages, 
+            0 AS qcimages, 
+            0 AS flaggingimages, 
+            0 AS indeximages, 
+            0 AS cbslqaimages,
+            0 AS clientqaacceptimages,
+            'scan' AS user_type
+        FROM 
+            scanned
+        ${whereClause} AND scanuser = '${username}' AND DATE(scandate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+            locationname, 
+            qcuser AS user, 
+            qcdate AS DATE, 
+            lotno, 
+            0 AS scanimages, 
+            qcimages, 
+            0 AS flaggingimages, 
+            0 AS indeximages, 
+            0 AS cbslqaimages,
+            0 AS clientqaacceptimages,
+            'qc' AS user_type
+        FROM 
+            scanned
+        ${whereClause} AND qcuser = '${username}' AND DATE(qcdate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+            locationname, 
+            flagginguser AS user, 
+            flaggingdate AS DATE, 
+            lotno, 
+            0 AS scanimages, 
+            0 AS qcimages, 
+            flaggingimages, 
+            0 AS indeximages, 
+            0 AS cbslqaimages,
+            0 AS clientqaacceptimages,
+            'flagging' AS user_type
+        FROM 
+            scanned
+        ${whereClause} AND flagginguser = '${username}' AND DATE(flaggingdate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+            locationname, 
+            indexuser AS user, 
+            indexdate AS DATE, 
+            lotno, 
+            0 AS scanimages, 
+            0 AS qcimages, 
+            0 AS flaggingimages, 
+            indeximages, 
+            0 AS cbslqaimages,
+            0 AS clientqaacceptimages,
+            'index' AS user_type
+        FROM 
+            scanned
+        ${whereClause} AND indexuser = '${username}' AND DATE(indexdate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+            locationname, 
+            cbslqauser AS user, 
+            cbslqadate AS DATE, 
+            lotno, 
+            0 AS scanimages, 
+            0 AS qcimages, 
+            0 AS flaggingimages, 
+            0 AS indeximages, 
+            cbslqaimages, 
+            0 AS clientqaacceptimages,
+            'cbslqa' AS user_type
+        FROM 
+            scanned
+        ${whereClause} AND cbslqauser = '${username}' AND DATE(cbslqadate) BETWEEN '${startDate}' AND '${endDate}'
+        UNION ALL
+        SELECT 
+            locationname, 
+            clientqaacceptuser AS user, 
+            clientqaacceptdate AS DATE, 
+            lotno, 
+            0 AS scanimages, 
+            0 AS qcimages, 
+            0 AS flaggingimages, 
+            0 AS indeximages, 
+            0 AS cbslqaimages, 
+            clientqaacceptimages, 
+            'clientqaaccept' AS user_type
+        FROM 
+            scanned
+        ${whereClause} AND clientqaacceptuser = '${username}' AND DATE(clientqaacceptdate) BETWEEN '${startDate}' AND '${endDate}'
+    ) AS subquery
+    GROUP BY 
+      locationname, 
+      user, 
+      DATE
+    ORDER BY 
+      DATE ASC;
+  `;
   
-//   const nonTechQuery = `
-//     SELECT 
-//       locationmaster.LocationName AS 'locationName',
-//       tbl_nontech_staff.StaffName AS 'user_type',
-//       DATE_FORMAT(DATE, '%Y-%m-%d') AS Date,
-//       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
-//       SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
-//       SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
-//       SUM(tbl_nontech_staff.Guard) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff
-//     INNER JOIN 
-//       locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
-//     WHERE
-//       locationmaster.LocationName IN ('${locationName.join("','")}') 
-//       AND tbl_nontech_staff.StaffName = '${username}' 
-//       AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
-//     GROUP BY 
-//       locationmaster.LocationName, 
-//       tbl_nontech_staff.StaffName,
-//       DATE
-//     ORDER BY 
-//       DATE ASC;
-//   `;
+  const nonTechQuery = `
+    SELECT 
+      LocationName AS 'locationName',
+      tbl_nontech_staff.StaffName AS 'user_type',
+      DATE_FORMAT(DATE, '%Y-%m-%d') AS Date,
+      SUM(tbl_nontech_staff.Counting) AS 'Counting', 
+      SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
+      SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
+      SUM(tbl_nontech_staff.Guard) AS 'Guard'
+    FROM 
+      tbl_nontech_staff
+    
+    WHERE
+      LocationName IN ('${locationName.join("','")}') 
+      AND tbl_nontech_staff.StaffName = '${username}' 
+      AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
+    GROUP BY 
+      LocationName, 
+      tbl_nontech_staff.StaffName,
+      DATE
+    ORDER BY 
+      DATE ASC;
+  `;
 
-//   mysql22.query(query, (err, scannedResults) => {
-//     if (err) {
-//       console.error("Error fetching scanned summary data:", err);
-//       res.status(500).json({ error: "Error fetching scanned summary data" });
-//       return;
-//     }
+  mysql22.query(query, (err, scannedResults) => {
+    if (err) {
+      console.error("Error fetching scanned summary data:", err);
+      res.status(500).json({ error: "Error fetching scanned summary data" });
+      return;
+    }
 
-//     mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//       if (err) {
-//         console.error("Error fetching non-tech summary data:", err);
-//         res.status(500).json({ error: "Error fetching non-tech summary data" });
-//         return;
-//       }
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
+      if (err) {
+        console.error("Error fetching non-tech summary data:", err);
+        res.status(500).json({ error: "Error fetching non-tech summary data" });
+        return;
+      }
 
-//       const combinedResults = [...scannedResults, ...nonTechResults];
-//       res.json(combinedResults);
-//     });
-//   });
-// });
+      const combinedResults = [...scannedResults, ...nonTechResults];
+      res.json(combinedResults);
+    });
+  });
+});
 
-// app.get('/detailedreportcummulativecsv', (req, res) => {
-//   let locationNames = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate;
+app.get('/detailedreportcummulativecsv', (req, res) => {
+  let locationNames = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate;
 
-//   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
-//     locationNames = null;
-//   } else {
-//     if (!Array.isArray(locationNames)) {
-//       locationNames = [locationNames];
-//     }
-//   }
+  if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
+    locationNames = null;
+  } else {
+    if (!Array.isArray(locationNames)) {
+      locationNames = [locationNames];
+    }
+  }
 
-//   let whereClause = "";
-//   if (locationNames) {
-//     whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
-//   }
+  let whereClause = "";
+  if (locationNames) {
+    whereClause = `WHERE s.locationname IN ('${locationNames.join("','")}')`;
+  }
 
-//   let dateClause = "";
-//   if (startDate && endDate) {
-//     dateClause = whereClause ? `AND` : `WHERE`;
-//     dateClause += ` (s.inventorydate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.scandate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.qcdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.flaggingdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.indexdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.cbslqadate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.exportdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
-//                 OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
-//   }
+  let dateClause = "";
+  if (startDate && endDate) {
+    dateClause = whereClause ? `AND` : `WHERE`;
+    dateClause += ` (s.inventorydate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.scandate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.qcdate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.flaggingdate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.indexdate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.cbslqadate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.exportdate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.clientqaacceptdate BETWEEN '${startDate}' AND '${endDate}'
+                OR s.digisigndate BETWEEN '${startDate}' AND '${endDate}')`;
+  }
 
-//   const getCsv = `
-//     SELECT 
-//       s.locationname,
-//       COALESCE(SUM(s.scanimages), 0) as 'ScannedImages',
-//       COALESCE(SUM(s.qcimages), 0) as 'QCImages',
-//       COALESCE(SUM(s.indeximages), 0) as 'IndexingImages',
-//       COALESCE(SUM(s.flaggingimages), 0) as 'FlaggingImages',
-//       COALESCE(SUM(s.cbslqaimages), 0) as 'CBSL_QAImages',
-//       COALESCE(SUM(s.clientqaacceptimages), 0) as 'Client_QA_AcceptedImages'
-//     FROM 
-//       scanned s
-//     ${whereClause}
-//     ${dateClause}
-//     GROUP BY 
-//       s.locationname`;
+  const getCsv = `
+    SELECT 
+      s.locationname,
+      COALESCE(SUM(s.scanimages), 0) as 'ScannedImages',
+      COALESCE(SUM(s.qcimages), 0) as 'QCImages',
+      COALESCE(SUM(s.indeximages), 0) as 'IndexingImages',
+      COALESCE(SUM(s.flaggingimages), 0) as 'FlaggingImages',
+      COALESCE(SUM(s.cbslqaimages), 0) as 'CBSL_QAImages',
+      COALESCE(SUM(s.clientqaacceptimages), 0) as 'Client_QA_AcceptedImages'
+    FROM 
+      scanned s
+    ${whereClause}
+    ${dateClause}
+    GROUP BY 
+      s.locationname`;
 
 
-//       let nonTechWhereClause = "";
-//   if (locationNames) {
-//     nonTechWhereClause = `WHERE lm.LocationName IN ('${locationNames.join("','")}')`;
-//   }
+      let nonTechWhereClause = "";
+  if (locationNames) {
+    nonTechWhereClause = `WHERE LocationName IN ('${locationNames.join("','")}')`;
+  }
 
-//   let nonTechDateClause = "";
-//   if (startDate && endDate) {
-//     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//     nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//   }
+  let nonTechDateClause = "";
+  if (startDate && endDate) {
+    nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+    nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
+  }
 
-//   const nonTechQuery = `
-//     SELECT 
-//       lm.LocationName AS 'LocationName',
-//       COALESCE(SUM(ns.Counting), 0) AS 'Counting', 
-//       COALESCE(SUM(ns.Inventory), 0) AS 'Inventory',
-//       COALESCE(SUM(ns.DocPreparation), 0) AS 'DocPreparation',
-//       COALESCE(SUM(ns.Guard), 0) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff ns
-//     INNER JOIN 
-//       locationmaster lm ON ns.LocationID = lm.LocationID 
-//       ${nonTechWhereClause}
-//       ${nonTechDateClause}
-//     GROUP BY
-//       lm.LocationName`;
+  const nonTechQuery = `
+    SELECT 
+      LocationName AS 'LocationName',
+      COALESCE(SUM(Counting), 0) AS 'Counting', 
+      COALESCE(SUM(Inventory), 0) AS 'Inventory',
+      COALESCE(SUM(DocPreparation), 0) AS 'DocPreparation',
+      COALESCE(SUM(Guard), 0) AS 'Guard'
+    FROM 
+      tbl_nontech_staff ns
+      ${nonTechWhereClause}
+      ${nonTechDateClause}
+    GROUP BY
+      LocationName`;
 
-//   mysql22.query(getCsv, (error, scannedResult) => {
-//     if (error) {
-//       console.error("Error occurred when exporting CSV:", error);
-//       res.status(500).json({ error: "An error occurred while exporting the CSV file" });
-//       return;
-//     }
+  mysql22.query(getCsv, (error, scannedResult) => {
+    if (error) {
+      console.error("Error occurred when exporting CSV:", error);
+      res.status(500).json({ error: "An error occurred while exporting the CSV file" });
+      return;
+    }
 
-//     mysql22.query(nonTechQuery, (error, nonTechResult) => {
-//       if (error) {
-//         console.error("Error occurred when exporting CSV:", error);
-//         res.status(500).json({ error: "An error occurred while exporting the CSV file" });
-//         return;
-//       }
+    mysql22.query(nonTechQuery, (error, nonTechResult) => {
+      if (error) {
+        console.error("Error occurred when exporting CSV:", error);
+        res.status(500).json({ error: "An error occurred while exporting the CSV file" });
+        return;
+      }
 
-//       const scannedData = scannedResult && scannedResult.length > 0 ? scannedResult : [];
-//       const nonTechData = nonTechResult && nonTechResult.length > 0 ? nonTechResult : [];
+      const scannedData = scannedResult && scannedResult.length > 0 ? scannedResult : [];
+      const nonTechData = nonTechResult && nonTechResult.length > 0 ? nonTechResult : [];
 
-//       if (scannedData.length === 0 && nonTechData.length === 0) {
-//         res.status(404).json({ error: "No data found for the provided parameters" });
-//         return;
-//       }
+      if (scannedData.length === 0 && nonTechData.length === 0) {
+        res.status(404).json({ error: "No data found for the provided parameters" });
+        return;
+      }
 
-//       res.setHeader("Content-Type", "text/csv");
-//       res.setHeader("Content-Disposition", "attachment;filename=All_location.csv");
-//       res.write("Sr. No.,Location,ScannedImages,QCImages,IndexingImages,FlaggingImages,CBSL_QAImages,Client_QA_AcceptedImages,Counting,Inventory,DocPreparation,Guard\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment;filename=All_location.csv");
+      res.write("Sr. No.,Location,ScannedImages,QCImages,IndexingImages,FlaggingImages,CBSL_QAImages,Client_QA_AcceptedImages,Counting,Inventory,DocPreparation,Guard\n");
 
-//       // Write CSV data
-//       scannedData.forEach((row, index) => {
-//         const nonTechRow= nonTechData.find(item => item.LocationName === row.locationname);
-//         res.write(`${index + 1},${row.locationname},${row.ScannedImages},${row.QCImages},${row.IndexingImages},${row.FlaggingImages},${row.CBSL_QAImages},${row.Client_QA_AcceptedImages},${nonTechRow ? nonTechRow.Counting : 0},${nonTechRow ? nonTechRow.Inventory : 0},${nonTechRow ? nonTechRow.DocPreparation : 0},${nonTechRow ? nonTechRow.Guard : 0}\n`);
-//       });
+      // Write CSV data
+      scannedData.forEach((row, index) => {
+        const nonTechRow= nonTechData.find(item => item.LocationName === row.locationname);
+        res.write(`${index + 1},${row.locationname},${row.ScannedImages},${row.QCImages},${row.IndexingImages},${row.FlaggingImages},${row.CBSL_QAImages},${row.Client_QA_AcceptedImages},${nonTechRow ? nonTechRow.Counting : 0},${nonTechRow ? nonTechRow.Inventory : 0},${nonTechRow ? nonTechRow.DocPreparation : 0},${nonTechRow ? nonTechRow.Guard : 0}\n`);
+      });
 
-//       res.end();
-//     });
-//   });
-// });
+      res.end();
+    });
+  });
+});
 
-// app.get("/alldetailedreportlocationwisecsv", (req, res) => {
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+app.get("/alldetailedreportlocationwisecsv", (req, res) => {
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
  
-//   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
-//     locationName = null;
-//   } else {
-//     if (!Array.isArray(locationName)) {
-//       locationName = [locationName];
-//     }
-//   }
+  if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+    locationName = null;
+  } else {
+    if (!Array.isArray(locationName)) {
+      locationName = [locationName];
+    }
+  }
 
-//   let whereClause = "";
+  let whereClause = "";
 
-//   if (locationName) {
-//     whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
-//   }
+  if (locationName) {
+    whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
+  }
 
-//   let fileName = `${locationName.join("_")}.csv`;
+  let fileName = `${locationName.join("_")}.csv`;
 
-//   const scannedResult = `
-//     SELECT 
-//       locationname AS 'locationName',
-//       user AS 'user_type',
-//       SUM(CASE WHEN user_type = 'scan' THEN scanimages ELSE 0 END) AS Scanned,
-//       SUM(CASE WHEN user_type = 'qc' THEN qcimages ELSE 0 END) AS QC,
-//       SUM(CASE WHEN user_type = 'flagging' THEN flaggingimages ELSE 0 END) AS Flagging,
-//       SUM(CASE WHEN user_type = 'index' THEN indeximages ELSE 0 END) AS Indexing,
-//       SUM(CASE WHEN user_type = 'cbslqa' THEN cbslqaimages ELSE 0 END) AS CBSL_QA,
-//       SUM(CASE WHEN user_type = 'clientqaaccept' THEN clientqaacceptimages ELSE 0 END) AS Client_QC
-//     FROM 
-//     (
-//       SELECT 
-//         locationname, 
-//         scanuser AS user, 
-//         scanimages, 
-//         0 AS qcimages, 
-//         0 AS flaggingimages, 
-//         0 AS indeximages, 
-//         0 AS cbslqaimages,
-//         0 AS clientqaacceptimages,
-//         'scan' AS user_type
-//       FROM 
-//         scanned
-//       ${whereClause} AND DATE(scandate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//         locationname, 
-//         qcuser AS user, 
-//         0 AS scanimages, 
-//         qcimages, 
-//         0 AS flaggingimages, 
-//         0 AS indeximages, 
-//         0 AS cbslqaimages,
-//         0 AS clientqaacceptimages,
-//         'qc' AS user_type
-//       FROM 
-//         scanned
-//       ${whereClause} AND DATE(qcdate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//         locationname, 
-//         flagginguser AS user, 
-//         0 AS scanimages, 
-//         0 AS qcimages, 
-//         flaggingimages, 
-//         0 AS indeximages, 
-//         0 AS cbslqaimages,
-//         0 AS clientqaacceptimages,
-//         'flagging' AS user_type
-//       FROM 
-//         scanned
-//       ${whereClause} AND DATE(flaggingdate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//         locationname, 
-//         indexuser AS user, 
-//         0 AS scanimages, 
-//         0 AS qcimages, 
-//         0 AS flaggingimages, 
-//         indeximages, 
-//         0 AS cbslqaimages,
-//         0 AS clientqaacceptimages,
-//         'index' AS user_type
-//       FROM 
-//         scanned
-//       ${whereClause} AND DATE(indexdate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//         locationname, 
-//         cbslqauser AS user, 
-//         0 AS scanimages, 
-//         0 AS qcimages, 
-//         0 AS flaggingimages, 
-//         0 AS indeximages, 
-//         cbslqaimages, 
-//         0 AS clientqaacceptimages,
-//         'cbslqa' AS user_type
-//       FROM 
-//         scanned
-//       ${whereClause} AND DATE(cbslqadate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//         locationname, 
-//         clientqaacceptuser AS user, 
-//         0 AS scanimages, 
-//         0 AS qcimages, 
-//         0 AS flaggingimages, 
-//         0 AS indeximages, 
-//         0 AS cbslqaimages, 
-//         clientqaacceptimages, 
-//         'clientqaaccept' AS user_type
-//       FROM 
-//         scanned
-//       ${whereClause} AND DATE(clientqaacceptdate) BETWEEN '${startDate}' AND '${endDate}'
-//     ) AS subquery
-//     GROUP BY 
-//       locationname, 
-//       user;
-//   `;
+  const scannedResult = `
+    SELECT 
+      locationname AS 'locationName',
+      user AS 'user_type',
+      SUM(CASE WHEN user_type = 'scan' THEN scanimages ELSE 0 END) AS Scanned,
+      SUM(CASE WHEN user_type = 'qc' THEN qcimages ELSE 0 END) AS QC,
+      SUM(CASE WHEN user_type = 'flagging' THEN flaggingimages ELSE 0 END) AS Flagging,
+      SUM(CASE WHEN user_type = 'index' THEN indeximages ELSE 0 END) AS Indexing,
+      SUM(CASE WHEN user_type = 'cbslqa' THEN cbslqaimages ELSE 0 END) AS CBSL_QA,
+      SUM(CASE WHEN user_type = 'clientqaaccept' THEN clientqaacceptimages ELSE 0 END) AS Client_QC
+    FROM 
+    (
+      SELECT 
+        locationname, 
+        scanuser AS user, 
+        scanimages, 
+        0 AS qcimages, 
+        0 AS flaggingimages, 
+        0 AS indeximages, 
+        0 AS cbslqaimages,
+        0 AS clientqaacceptimages,
+        'scan' AS user_type
+      FROM 
+        scanned
+      ${whereClause} AND DATE(scandate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+        locationname, 
+        qcuser AS user, 
+        0 AS scanimages, 
+        qcimages, 
+        0 AS flaggingimages, 
+        0 AS indeximages, 
+        0 AS cbslqaimages,
+        0 AS clientqaacceptimages,
+        'qc' AS user_type
+      FROM 
+        scanned
+      ${whereClause} AND DATE(qcdate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+        locationname, 
+        flagginguser AS user, 
+        0 AS scanimages, 
+        0 AS qcimages, 
+        flaggingimages, 
+        0 AS indeximages, 
+        0 AS cbslqaimages,
+        0 AS clientqaacceptimages,
+        'flagging' AS user_type
+      FROM 
+        scanned
+      ${whereClause} AND DATE(flaggingdate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+        locationname, 
+        indexuser AS user, 
+        0 AS scanimages, 
+        0 AS qcimages, 
+        0 AS flaggingimages, 
+        indeximages, 
+        0 AS cbslqaimages,
+        0 AS clientqaacceptimages,
+        'index' AS user_type
+      FROM 
+        scanned
+      ${whereClause} AND DATE(indexdate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+        locationname, 
+        cbslqauser AS user, 
+        0 AS scanimages, 
+        0 AS qcimages, 
+        0 AS flaggingimages, 
+        0 AS indeximages, 
+        cbslqaimages, 
+        0 AS clientqaacceptimages,
+        'cbslqa' AS user_type
+      FROM 
+        scanned
+      ${whereClause} AND DATE(cbslqadate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+        locationname, 
+        clientqaacceptuser AS user, 
+        0 AS scanimages, 
+        0 AS qcimages, 
+        0 AS flaggingimages, 
+        0 AS indeximages, 
+        0 AS cbslqaimages, 
+        clientqaacceptimages, 
+        'clientqaaccept' AS user_type
+      FROM 
+        scanned
+      ${whereClause} AND DATE(clientqaacceptdate) BETWEEN '${startDate}' AND '${endDate}'
+    ) AS subquery
+    GROUP BY 
+      locationname, 
+      user;
+  `;
 
-//   let nonTechWhereClause = "";
-//   if (locationName) {
-//     nonTechWhereClause = `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')`;
-//   }
+  let nonTechWhereClause = "";
+  if (locationName) {
+    nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
+  }
 
-//   let nonTechDateClause = "";
-//   if (startDate && endDate) {
-//     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//     nonTechDateClause += ` tbl_nontech_staff.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//   }
+  let nonTechDateClause = "";
+  if (startDate && endDate) {
+    nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+    nonTechDateClause += ` tbl_nontech_staff.Date BETWEEN '${startDate}' AND '${endDate}'`;
+  }
 
-//   const nonTechQuery = `
-//   SELECT 
-//     locationmaster.LocationName AS 'locationName',
-//     tbl_nontech_staff.StaffName AS 'user_type',
-//     SUM(tbl_nontech_staff.Counting) AS 'Counting', 
-//     SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
-//     SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
-//     SUM(tbl_nontech_staff.Guard) AS 'Guard'
-//   FROM 
-//     tbl_nontech_staff
-//   INNER JOIN 
-//     locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
-//   ${nonTechWhereClause}
-//   ${nonTechDateClause}
-//   GROUP BY 
-//     locationmaster.LocationName, 
-//     tbl_nontech_staff.StaffName;
-//   `;
+  const nonTechQuery = `
+  SELECT 
+    LocationName AS 'locationName',
+    tbl_nontech_staff.StaffName AS 'user_type',
+    SUM(tbl_nontech_staff.Counting) AS 'Counting', 
+    SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
+    SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
+    SUM(tbl_nontech_staff.Guard) AS 'Guard'
+  FROM 
+    tbl_nontech_staff
+  
+  ${nonTechWhereClause}
+  ${nonTechDateClause}
+  GROUP BY 
+    LocationName, 
+    tbl_nontech_staff.StaffName;
+  `;
 
-//   mysql22.query(scannedResult, (error, scannedResults) => {
-//     if (error) {
-//       console.error("Error occurred when exporting CSV:", error);
-//       res.status(500).json({ error: "An error occurred while exporting the CSV file" });
-//       return;
-//     }
+  mysql22.query(scannedResult, (error, scannedResults) => {
+    if (error) {
+      console.error("Error occurred when exporting CSV:", error);
+      res.status(500).json({ error: "An error occurred while exporting the CSV file" });
+      return;
+    }
 
-//     mysql22.query(nonTechQuery, (error, nonTechResults) => {
-//       if (error) {
-//         console.error("Error occurred when exporting CSV:", error);
-//         res.status(500).json({ error: "An error occurred while exporting the CSV file" });
-//         return;
-//       }
+    mysql22.query(nonTechQuery, (error, nonTechResults) => {
+      if (error) {
+        console.error("Error occurred when exporting CSV:", error);
+        res.status(500).json({ error: "An error occurred while exporting the CSV file" });
+        return;
+      }
 
-//       // Prepare a combined result set
-//       const combinedResults = [];
+      // Prepare a combined result set
+      const combinedResults = [];
 
-//       // Add scanned results to combined results
-//       scannedResults.forEach(row => {
-//         combinedResults.push({
-//           locationName: row.locationName,
-//           user_type: row.user_type,
-//           Scanned: row.Scanned,
-//           QC: row.QC,
-//           Indexing: row.Indexing,
-//           Flagging: row.Flagging,
-//           CBSL_QA: row.CBSL_QA,
-//           Client_QC: row.Client_QC,
-//           Counting: 0,
-//           Inventory: 0,
-//           DocPreparation: 0,
-//           Guard: 0
-//         });
-//       });
+      // Add scanned results to combined results
+      scannedResults.forEach(row => {
+        combinedResults.push({
+          locationName: row.locationName,
+          user_type: row.user_type,
+          Scanned: row.Scanned,
+          QC: row.QC,
+          Indexing: row.Indexing,
+          Flagging: row.Flagging,
+          CBSL_QA: row.CBSL_QA,
+          Client_QC: row.Client_QC,
+          Counting: 0,
+          Inventory: 0,
+          DocPreparation: 0,
+          Guard: 0
+        });
+      });
 
-//       // Add non-tech results to combined results
-//       nonTechResults.forEach(row => {
-//         combinedResults.push({
-//           locationName: row.locationName,
-//           user_type: row.user_type,
-//           Scanned: 0,
-//           QC: 0,
-//           Indexing: 0,
-//           Flagging: 0,
-//           CBSL_QA: 0,
-//           Client_QC: 0,
-//           Counting: row.Counting,
-//           Inventory: row.Inventory,
-//           DocPreparation: row.DocPreparation,
-//           Guard: row.Guard
-//         });
-//       });
+      // Add non-tech results to combined results
+      nonTechResults.forEach(row => {
+        combinedResults.push({
+          locationName: row.locationName,
+          user_type: row.user_type,
+          Scanned: 0,
+          QC: 0,
+          Indexing: 0,
+          Flagging: 0,
+          CBSL_QA: 0,
+          Client_QC: 0,
+          Counting: row.Counting,
+          Inventory: row.Inventory,
+          DocPreparation: row.DocPreparation,
+          Guard: row.Guard
+        });
+      });
 
-//       // Set response headers for CSV file
-//       res.setHeader("Content-Type", "text/csv");
-//       res.setHeader("Content-Disposition", `attachment;filename=${fileName}`);
-//       res.write("Sr. No.,Location,UserName,Scanned,QC,Indexing,Flagging,CBSL_QA,Client_QA_Accepted,Counting,Inventory,DocPreparation,Guard\n");
+      // Set response headers for CSV file
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment;filename=${fileName}`);
+      res.write("Sr. No.,Location,UserName,Scanned,QC,Indexing,Flagging,CBSL_QA,Client_QA_Accepted,Counting,Inventory,DocPreparation,Guard\n");
 
-//       // Write combined results to the response
-//       combinedResults.forEach((row, index) => {
-//         res.write(`${index + 1},${row.locationName},${row.user_type},${row.Scanned},${row.QC},${row.Indexing},${row.Flagging},${row.CBSL_QA},${row.Client_QC},${row.Counting},${row.Inventory},${row.DocPreparation},${row.Guard}\n`);
-//       });
+      // Write combined results to the response
+      combinedResults.forEach((row, index) => {
+        res.write(`${index + 1},${row.locationName},${row.user_type},${row.Scanned},${row.QC},${row.Indexing},${row.Flagging},${row.CBSL_QA},${row.Client_QC},${row.Counting},${row.Inventory},${row.DocPreparation},${row.Guard}\n`);
+      });
 
-//       // End response
-//       res.end();
-//     });
-//   });
-// });
+      // End response
+      res.end();
+    });
+  });
+});
 
-// app.get("/alluserdetailedreportlocationwisecsv",  (req, res, next) => {
-//   let username=req.query.username
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
-//   console.log("Location Names:", locationName);
+app.get("/alluserdetailedreportlocationwisecsv",  (req, res, next) => {
+  let username=req.query.username
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+  console.log("Location Names:", locationName);
 
-//   const queryParams = [];
+  const queryParams = [];
 
-//   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
-//     locationName = null;
-//   } else {
-//     if (!Array.isArray(locationName)) {
-//       locationName= [locationName];
-//     }
-//   }
+  if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+    locationName = null;
+  } else {
+    if (!Array.isArray(locationName)) {
+      locationName= [locationName];
+    }
+  }
 
-//   let whereClause = "";
-//   if (locationName) {
-//     whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
-//   }
+  let whereClause = "";
+  if (locationName) {
+    whereClause = `WHERE locationname IN ('${locationName.join("','")}')`;
+  }
 
   
-//   let fileName = `${locationName.join("_")}_${username}.csv`;
-// const getCsv = `
+  let fileName = `${locationName.join("_")}_${username}.csv`;
+const getCsv = `
 
-// SELECT 
-//   locationname AS 'locationName',
-//   user As 'user_type',
-//   DATE_FORMAT(Date, '%y-%m-%d') AS Date,
-//   lotno,
-//   SUM(CASE WHEN user_type = 'scan' THEN scanimages ELSE 0 END) AS Scanned,
-//   SUM(CASE WHEN user_type = 'qc' THEN qcimages ELSE 0 END) AS QC,
-//   SUM(CASE WHEN user_type = 'flagging' THEN flaggingimages ELSE 0 END) AS Flagging,
-//   SUM(CASE WHEN user_type = 'index' THEN indeximages ELSE 0 END) AS Indexing,
-//   SUM(CASE WHEN user_type = 'cbslqa' THEN cbslqaimages ELSE 0 END) AS CBSL_QA,
-//   SUM(CASE WHEN user_type = 'clientqaaccept' THEN clientqaacceptimages ELSE 0 END) AS Client_QC
-// FROM 
-//   (
-//       SELECT 
-//           locationname , 
-//           scanuser AS user, 
-//           scandate AS Date, 
-//           lotno, 
-//           scanimages, 
-//           0 AS qcimages, 
-//           0 AS flaggingimages, 
-//           0 AS indeximages, 
-//           0 AS cbslqaimages,
-//           0 AS clientqaacceptimages,
-//           'scan' AS user_type
-//       FROM 
-//           scanned
-//       ${whereClause} AND scanuser = '${username}' AND DATE(scandate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//           locationname , 
-//           qcuser AS user, 
-//           qcdate AS Date, 
-//           lotno, 
-//           0 AS scanimages, 
-//           qcimages, 
-//           0 AS flaggingimages, 
-//           0 AS indeximages, 
-//           0 AS cbslqaimages,
-//           0 AS clientqaacceptimages,
-//           'qc' AS user_type
-//       FROM 
-//           scanned
-//       ${whereClause} AND qcuser = '${username}' AND DATE(qcdate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//           locationname , 
-//           flagginguser AS user, 
-//           flaggingdate AS Date, 
-//           lotno, 
-//           0 AS scanimages, 
-//           0 AS qcimages, 
-//           flaggingimages, 
-//           0 AS indeximages, 
-//           0 AS cbslqaimages,
-//           0 AS clientqaacceptimages,
-//           'flagging' AS user_type
-//       FROM 
-//           scanned
-//       ${whereClause} AND flagginguser = '${username}' AND DATE(flaggingdate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//           locationname , 
-//           indexuser AS user, 
-//           indexdate AS Date, 
-//           lotno, 
-//           0 AS scanimages, 
-//           0 AS qcimages, 
-//           0 AS flaggingimages, 
-//           indeximages, 
-//           0 AS cbslqaimages,
-//           0 AS clientqaacceptimages,
-//           'index' AS user_type
-//       FROM 
-//           scanned
-//       ${whereClause} AND indexuser = '${username}' AND DATE(indexdate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//           locationname , 
-//           cbslqauser AS user, 
-//           cbslqadate AS Date, 
-//           lotno, 
-//           0 AS scanimages, 
-//           0 AS qcimages, 
-//           0 AS flaggingimages, 
-//           0 AS indeximages, 
-//           cbslqaimages, 
-//           0 AS clientqaacceptimages,
-//           'cbslqa' AS user_type
-//       FROM 
-//           scanned
-//       ${whereClause} AND cbslqauser = '${username}' AND DATE(cbslqadate) BETWEEN '${startDate}' AND '${endDate}'
-//       UNION ALL
-//       SELECT 
-//           locationname , 
-//           clientqaacceptuser AS user, 
-//           clientqaacceptdate AS Date, 
-//           lotno, 
-//           0 AS scanimages, 
-//           0 AS qcimages, 
-//           0 AS flaggingimages, 
-//           0 AS indeximages, 
-//           0 AS cbslqaimages, 
-//           clientqaacceptimages, 
-//           'clientqaaccept' AS user_type
-//       FROM 
-//           scanned
-//       ${whereClause} AND clientqaacceptuser = '${username}' AND DATE(clientqaacceptdate) BETWEEN '${startDate}' AND '${endDate}'
-//   ) AS subquery
+SELECT 
+  locationname AS 'locationName',
+  user As 'user_type',
+  DATE_FORMAT(Date, '%y-%m-%d') AS Date,
+  lotno,
+  SUM(CASE WHEN user_type = 'scan' THEN scanimages ELSE 0 END) AS Scanned,
+  SUM(CASE WHEN user_type = 'qc' THEN qcimages ELSE 0 END) AS QC,
+  SUM(CASE WHEN user_type = 'flagging' THEN flaggingimages ELSE 0 END) AS Flagging,
+  SUM(CASE WHEN user_type = 'index' THEN indeximages ELSE 0 END) AS Indexing,
+  SUM(CASE WHEN user_type = 'cbslqa' THEN cbslqaimages ELSE 0 END) AS CBSL_QA,
+  SUM(CASE WHEN user_type = 'clientqaaccept' THEN clientqaacceptimages ELSE 0 END) AS Client_QC
+FROM 
+  (
+      SELECT 
+          locationname , 
+          scanuser AS user, 
+          scandate AS Date, 
+          lotno, 
+          scanimages, 
+          0 AS qcimages, 
+          0 AS flaggingimages, 
+          0 AS indeximages, 
+          0 AS cbslqaimages,
+          0 AS clientqaacceptimages,
+          'scan' AS user_type
+      FROM 
+          scanned
+      ${whereClause} AND scanuser = '${username}' AND DATE(scandate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+          locationname , 
+          qcuser AS user, 
+          qcdate AS Date, 
+          lotno, 
+          0 AS scanimages, 
+          qcimages, 
+          0 AS flaggingimages, 
+          0 AS indeximages, 
+          0 AS cbslqaimages,
+          0 AS clientqaacceptimages,
+          'qc' AS user_type
+      FROM 
+          scanned
+      ${whereClause} AND qcuser = '${username}' AND DATE(qcdate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+          locationname , 
+          flagginguser AS user, 
+          flaggingdate AS Date, 
+          lotno, 
+          0 AS scanimages, 
+          0 AS qcimages, 
+          flaggingimages, 
+          0 AS indeximages, 
+          0 AS cbslqaimages,
+          0 AS clientqaacceptimages,
+          'flagging' AS user_type
+      FROM 
+          scanned
+      ${whereClause} AND flagginguser = '${username}' AND DATE(flaggingdate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+          locationname , 
+          indexuser AS user, 
+          indexdate AS Date, 
+          lotno, 
+          0 AS scanimages, 
+          0 AS qcimages, 
+          0 AS flaggingimages, 
+          indeximages, 
+          0 AS cbslqaimages,
+          0 AS clientqaacceptimages,
+          'index' AS user_type
+      FROM 
+          scanned
+      ${whereClause} AND indexuser = '${username}' AND DATE(indexdate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+          locationname , 
+          cbslqauser AS user, 
+          cbslqadate AS Date, 
+          lotno, 
+          0 AS scanimages, 
+          0 AS qcimages, 
+          0 AS flaggingimages, 
+          0 AS indeximages, 
+          cbslqaimages, 
+          0 AS clientqaacceptimages,
+          'cbslqa' AS user_type
+      FROM 
+          scanned
+      ${whereClause} AND cbslqauser = '${username}' AND DATE(cbslqadate) BETWEEN '${startDate}' AND '${endDate}'
+      UNION ALL
+      SELECT 
+          locationname , 
+          clientqaacceptuser AS user, 
+          clientqaacceptdate AS Date, 
+          lotno, 
+          0 AS scanimages, 
+          0 AS qcimages, 
+          0 AS flaggingimages, 
+          0 AS indeximages, 
+          0 AS cbslqaimages, 
+          clientqaacceptimages, 
+          'clientqaaccept' AS user_type
+      FROM 
+          scanned
+      ${whereClause} AND clientqaacceptuser = '${username}' AND DATE(clientqaacceptdate) BETWEEN '${startDate}' AND '${endDate}'
+  ) AS subquery
   
-// GROUP BY 
-//   locationname, 
-//   user, 
-//   Date
-// ORDER BY 
-//   Date ASC;
+GROUP BY 
+  locationname, 
+  user, 
+  Date
+ORDER BY 
+  Date ASC;
 
-// `;
+`;
 
-// let nonTechWhereClause = "";
-// if (locationName) {
-//   nonTechWhereClause = `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')`;
-// }
+let nonTechWhereClause = "";
+if (locationName) {
+  nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
+}
 
-// let nonTechDateClause = "";
-// if (startDate && endDate) {
-//   nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//   nonTechDateClause += ` tbl_nontech_staff.Date BETWEEN '${startDate}' AND '${endDate}'`;
-// }
+let nonTechDateClause = "";
+if (startDate && endDate) {
+  nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+  nonTechDateClause += ` tbl_nontech_staff.Date BETWEEN '${startDate}' AND '${endDate}'`;
+}
 
 
-// const nonTechQuery = `
-//     SELECT 
-//       locationmaster.LocationName AS 'locationName',
-//       tbl_nontech_staff.StaffName AS 'user_type',
-//       DATE_FORMAT(date, '%Y-%m-%d') AS date,
-//       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
-//       SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
-//       SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
-//       SUM(tbl_nontech_staff.Guard) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff
-//     INNER JOIN 
-//       locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
-//       ${nonTechWhereClause}
-//       AND tbl_nontech_staff.StaffName = '${username}' 
-//       ${nonTechDateClause}
-//     GROUP BY 
-//       locationmaster.LocationName, 
-//       tbl_nontech_staff.StaffName,
-//       DATE
-//     ORDER BY 
-//       DATE ASC;
-//   `;
+const nonTechQuery = `
+    SELECT 
+      LocationName AS 'locationName',
+      tbl_nontech_staff.StaffName AS 'user_type',
+      DATE_FORMAT(date, '%Y-%m-%d') AS date,
+      SUM(tbl_nontech_staff.Counting) AS 'Counting', 
+      SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
+      SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
+      SUM(tbl_nontech_staff.Guard) AS 'Guard'
+    FROM 
+      tbl_nontech_staff
+      ${nonTechWhereClause}
+      AND tbl_nontech_staff.StaffName = '${username}' 
+      ${nonTechDateClause}
+    GROUP BY 
+      LocationName, 
+      tbl_nontech_staff.StaffName,
+      DATE
+    ORDER BY 
+      DATE ASC;
+  `;
 
-//   mysql22.query(getCsv, (err,scannedResults) => {
-//     if (err) {
-//       console.error("Error fetching scanned summary data:", err);
-//       res.status(500).json({ error: "Error fetching scanned summary data" });
-//       return;
-//     }
+  mysql22.query(getCsv, (err,scannedResults) => {
+    if (err) {
+      console.error("Error fetching scanned summary data:", err);
+      res.status(500).json({ error: "Error fetching scanned summary data" });
+      return;
+    }
 
-//    mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//       if (err) {
-//         console.error("Error fetching non-tech summary data:", err);
-//         res.status(500).json({ error: "Error fetching non-tech summary data" });
-//         return;
-//       }
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
+      if (err) {
+        console.error("Error fetching non-tech summary data:", err);
+        res.status(500).json({ error: "Error fetching non-tech summary data" });
+        return;
+      }
 
 
 
-//       const combinedResults = [];
+      const combinedResults = [];
 
-//       // Add scanned results to combined results
-//       scannedResults.forEach(row => {
-//         combinedResults.push({
-//           locationName: row.locationName,
-//           user_type: row.user_type,
-//           lotno:row.lotno,
-//           Date:row.Date,
-//           Scanned: row.Scanned,
-//           QC: row.QC,
-//           Indexing: row.Indexing,
-//           Flagging: row.Flagging,
-//           CBSL_QA: row.CBSL_QA,
-//           Client_QC: row.Client_QC,
-//           Counting: 0,
-//           Inventory: 0,
-//           DocPreparation: 0,
-//           Guard: 0
-//         });
-//       });
+      // Add scanned results to combined results
+      scannedResults.forEach(row => {
+        combinedResults.push({
+          locationName: row.locationName,
+          user_type: row.user_type,
+          lotno:row.lotno,
+          Date:row.Date,
+          Scanned: row.Scanned,
+          QC: row.QC,
+          Indexing: row.Indexing,
+          Flagging: row.Flagging,
+          CBSL_QA: row.CBSL_QA,
+          Client_QC: row.Client_QC,
+          Counting: 0,
+          Inventory: 0,
+          DocPreparation: 0,
+          Guard: 0
+        });
+      });
 
-//       // Add non-tech results to combined results
-//       nonTechResults.forEach(row => {
-//         combinedResults.push({
-//           locationName: row.locationName,
-//           user_type: row.user_type,
-//           lotno:0,
-//           Date:row.date,
-//           Scanned: 0,
-//           QC: 0,
-//           Indexing: 0,
-//           Flagging: 0,
-//           CBSL_QA: 0,
-//           Client_QC: 0,
-//           Counting: row.Counting,
-//           Inventory: row.Inventory,
-//           DocPreparation: row.DocPreparation,
-//           Guard: row.Guard
-//         });
-//       });
+      // Add non-tech results to combined results
+      nonTechResults.forEach(row => {
+        combinedResults.push({
+          locationName: row.locationName,
+          user_type: row.user_type,
+          lotno:0,
+          Date:row.date,
+          Scanned: 0,
+          QC: 0,
+          Indexing: 0,
+          Flagging: 0,
+          CBSL_QA: 0,
+          Client_QC: 0,
+          Counting: row.Counting,
+          Inventory: row.Inventory,
+          DocPreparation: row.DocPreparation,
+          Guard: row.Guard
+        });
+      });
 
-//   res.setHeader("Content-Type", "text/csv");
-//   res.setHeader("Content-Disposition", `attachment;filename=${fileName}`);
-//   res.write('Sr. No.,Location Name,UserName,LotNo,Date,Scanned,QC,Index,Flagging,CBSL_QA,Client_QC,Counting,Inventory,DocPreparation,Guard\n');
-//   // Write CSV data
-//   combinedResults.forEach((row, index) => {
-//     res.write(
-//       (index + 1) + "," +
-//       row['locationName'] + "," +  // Access the 'Location Name' column
-//     row.user_type + "," +
-//     row.lotno + "," +  // Access the 'LotNo' column
-//     row.Date +"," +
-//       row['Scanned'] + "," +
-//       row['QC'] + "," +
-//       row['Indexing'] + "," +
-//       row['Flagging'] + "," +
-//       row['CBSL_QA'] + "," +
-//       row['Client_QC'] +","+
-//       row['Counting']+ ","+
-//       row['Inventory'] + ","+
-//       row['DocPreparation'] +","+
-//       row['Guard'] +","+
-//        "\n"
-//     );
-//   });
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment;filename=${fileName}`);
+  res.write('Sr. No.,Location Name,UserName,LotNo,Date,Scanned,QC,Index,Flagging,CBSL_QA,Client_QC,Counting,Inventory,DocPreparation,Guard\n');
+  // Write CSV data
+  combinedResults.forEach((row, index) => {
+    res.write(
+      (index + 1) + "," +
+      row['locationName'] + "," +  // Access the 'Location Name' column
+    row.user_type + "," +
+    row.lotno + "," +  // Access the 'LotNo' column
+    row.Date +"," +
+      row['Scanned'] + "," +
+      row['QC'] + "," +
+      row['Indexing'] + "," +
+      row['Flagging'] + "," +
+      row['CBSL_QA'] + "," +
+      row['Client_QC'] +","+
+      row['Counting']+ ","+
+      row['Inventory'] + ","+
+      row['DocPreparation'] +","+
+      row['Guard'] +","+
+       "\n"
+    );
+  });
 
-//     // End response
-//     res.end();
-//   });
-// });
-// });
+    // End response
+    res.end();
+  });
+});
+});
 
-//Updc Non Tech Apis
+//////////////////////Updc Non Tech Apis////////////////////
 
-// app.get("/summaryreportnontech", (req, res) => {
-//   let locationNames = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate;
+app.get("/summaryreportnontech", (req, res) => {
+  let locationNames = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate;
 
-//   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
-//     locationNames = null;
-//   } else {
-//     if (!Array.isArray(locationNames)) {
-//       locationNames = [locationNames];
-//     }
-//   }
+  if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
+    locationNames = null;
+  } else {
+    if (!Array.isArray(locationNames)) {
+      locationNames = [locationNames];
+    }
+  }
 
-//   let nonTechWhereClause = "";
-//   if (locationNames) {
-//     nonTechWhereClause = `WHERE lm.LocationName IN ('${locationNames.join("','")}')`;
-//   }
+  let nonTechWhereClause = "";
+  if (locationNames) {
+    nonTechWhereClause = `WHERE LocationName IN ('${locationNames.join("','")}')`;
+  }
 
-//   let nonTechDateClause = "";
-//   if (startDate && endDate) {
-//     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//     nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//   }
+  let nonTechDateClause = "";
+  if (startDate && endDate) {
+    nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+    nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
+  }
 
-//   const nonTechQuery = `
-//     SELECT 
-//       sum(Counting) as 'Counting', 
-//       sum(Inventory) as 'Inventory',
-//       sum(DocPreparation) as 'DocPreparation',
-//       sum(Guard) as 'Guard'
-//     FROM tbl_nontech_staff ns
-//     ${nonTechWhereClause}
-//     ${nonTechDateClause};
-//   `;
+  const nonTechQuery = `
+    SELECT 
+      sum(Counting) as 'Counting', 
+      sum(Inventory) as 'Inventory',
+      sum(DocPreparation) as 'DocPreparation',
+      sum(Guard) as 'Guard'
+    FROM tbl_nontech_staff ns
+    ${nonTechWhereClause}
+    ${nonTechDateClause};
+  `;
 
-//   mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//     if (err) {
-//       console.error("Error fetching non-tech summary data:", err);
-//       res.status(500).json({ error: "Error fetching non-tech summary data" });
-//       return;
-//     }
-//     if (nonTechResults.length > 0) {
-//       res.json(nonTechResults[0]); // Send only the first element of the array as response
-//     } else {
-//       res.status(404).json({ error: "No data found" });
-//     }
-//   });
-// });
+  mysql22.query(nonTechQuery, (err, nonTechResults) => {
+    if (err) {
+      console.error("Error fetching non-tech summary data:", err);
+      res.status(500).json({ error: "Error fetching non-tech summary data" });
+      return;
+    }
+    if (nonTechResults.length > 0) {
+      res.json(nonTechResults[0]); // Send only the first element of the array as response
+    } else {
+      res.status(404).json({ error: "No data found" });
+    }
+  });
+});
 
-// app.get("/detailedreportcummulativenontech", (req, res) => {
-//     let locationName = req.query.locationName;
-//     let startDate = req.query.startDate;
-//     let endDate = req.query.endDate;
+app.get("/detailedreportcummulativenontech", (req, res) => {
+    let locationName = req.query.locationName;
+    let startDate = req.query.startDate;
+    let endDate = req.query.endDate;
   
-//     // Check if locationName is provided and handle it properly
-//     if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
-//       locationName = null;
-//     } else {
-//       if (!Array.isArray(locationName)) {
-//         locationName = [locationName];
-//       }
-//     }
+    // Check if locationName is provided and handle it properly
+    if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+      locationName = null;
+    } else {
+      if (!Array.isArray(locationName)) {
+        locationName = [locationName];
+      }
+    }
 
-//     // Prepare WHERE clause for filtering by locationName
-//     let nonTechWhereClause = "";
-//     if (locationName) {
-//       nonTechWhereClause = `WHERE lm.LocationName IN ('${locationName.join("','")}')`;
-//     }
+    // Prepare WHERE clause for filtering by locationName
+    let nonTechWhereClause = "";
+    if (locationName) {
+      nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
+    }
   
-//     // Prepare WHERE clause for filtering by startDate and endDate
-//     let nonTechDateClause = "";
-//     if (startDate && endDate) {
-//       nonTechDateClause = nonTechWhereClause ? ` AND` : `WHERE`;
-//       nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//     }
+    // Prepare WHERE clause for filtering by startDate and endDate
+    let nonTechDateClause = "";
+    if (startDate && endDate) {
+      nonTechDateClause = nonTechWhereClause ? ` AND` : `WHERE`;
+      nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
+    }
   
-//     const nonTechQuery = `
-//     SELECT 
-//       lm.LocationName AS 'LocationName',
-//       SUM(ns.Counting) AS 'Counting', 
-//       SUM(ns.Inventory) AS 'Inventory',
-//       SUM(ns.DocPreparation) AS 'DocPreparation',
-//       SUM(ns.Guard) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff ns
-//     INNER JOIN 
-//       locationmaster lm ON ns.LocationID = lm.LocationID
-//     ${nonTechWhereClause}
-//     ${nonTechDateClause}
-//     GROUP BY
-//       lm.LocationName;`;
+    const nonTechQuery = `
+    SELECT 
+      LocationName AS 'LocationName',
+      SUM(Counting) AS 'Counting', 
+      SUM(Inventory) AS 'Inventory',
+      SUM(DocPreparation) AS 'DocPreparation',
+      SUM(Guard) AS 'Guard'
+    FROM 
+      tbl_nontech_staff ns
+    
+    ${nonTechWhereClause}
+    ${nonTechDateClause}
+    GROUP BY
+      LocationName;`;
 
-//     // Execute the query
-//     commonDB.query(nonTechQuery, (err, nonTechResults) => {
-//       if (err) {
-//         console.error("Error fetching non-tech summary data:", err);
-//         res.status(500).json({ error: "Error fetching non-tech summary data" });
-//         return;
-//       }
+    // Execute the query
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
+      if (err) {
+        console.error("Error fetching non-tech summary data:", err);
+        res.status(500).json({ error: "Error fetching non-tech summary data" });
+        return;
+      }
 
 //       // Send the response with modified format
-//       const simplifiedData = nonTechResults.map(item => ({
-//         "LocationName": item.LocationName,
-//         "Counting": item.Counting,
-//         "Inventory": item.Inventory,
-//         "DocPreparation": item.DocPreparation,
-//         "Guard": item.Guard
-//       }));
+      const simplifiedData = nonTechResults.map(item => ({
+        "LocationName": item.LocationName,
+        "Counting": item.Counting,
+        "Inventory": item.Inventory,
+        "DocPreparation": item.DocPreparation,
+        "Guard": item.Guard
+      }));
 
-//       res.json(simplifiedData);
-//     });
-// });
+      res.json(simplifiedData);
+    });
+});
 
-// app.get("/alldetailedreportlocationwisenontech", (req, res) => {
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+app.get("/alldetailedreportlocationwisenontech", (req, res) => {
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
 
-//   // Ensure locationName is an array if provided
-//   if (!Array.isArray(locationName)) {
-//     locationName = [locationName];
-//   }
+  // Ensure locationName is an array if provided
+  if (!Array.isArray(locationName)) {
+    locationName = [locationName];
+  }
 
-//   // Prepare the WHERE clause based on locationName
-//   const whereClause = locationName ? `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')` : '';
+  // Prepare the WHERE clause based on locationName
+  const whereClause = locationName ? `WHERE LocationName IN ('${locationName.join("','")}')` : '';
 
-//   const nonTechQuery = `
-//     SELECT 
-//       locationmaster.LocationName AS 'locationName',
-//       tbl_nontech_staff.StaffName AS 'user_type',
-//       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
-//       SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
-//       SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
-//       SUM(tbl_nontech_staff.Guard) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff
-//     INNER JOIN 
-//       locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
-//     ${whereClause} AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
-//     GROUP BY 
-//       locationmaster.LocationName, 
-//       tbl_nontech_staff.StaffName;
-//   `;
+  const nonTechQuery = `
+    SELECT 
+      LocationName AS 'locationName',
+      tbl_nontech_staff.StaffName AS 'user_type',
+      SUM(tbl_nontech_staff.Counting) AS 'Counting', 
+      SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
+      SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
+      SUM(tbl_nontech_staff.Guard) AS 'Guard'
+    FROM 
+      tbl_nontech_staff
+    
+    ${whereClause} AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
+    GROUP BY 
+      LocationName, 
+      tbl_nontech_staff.StaffName;
+  `;
 
-//   mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//     if (err) {
-//       console.error("Error fetching non-tech summary data:", err);
-//       res.status(500).json({ error: "Error fetching non-tech summary data" });
-//       return;
-//     }
+  mysql22.query(nonTechQuery, (err, nonTechResults) => {
+    if (err) {
+      console.error("Error fetching non-tech summary data:", err);
+      res.status(500).json({ error: "Error fetching non-tech summary data" });
+      return;
+    }
 
-//     res.json(nonTechResults);
-//   });
-// });
+    res.json(nonTechResults);
+  });
+});
 
-// app.get("/alluserdetailedreportlocationwisenontech", (req, res) => {
-//   let username = req.query.username;
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+app.get("/alluserdetailedreportlocationwisenontech", (req, res) => {
+  let username = req.query.username;
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
 
-//   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
-//     locationName = null;
-//   } else {
-//     if (!Array.isArray(locationName)) {
-//       locationName = [locationName];
-//     }
-//   }
+  if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+    locationName = null;
+  } else {
+    if (!Array.isArray(locationName)) {
+      locationName = [locationName];
+    }
+  }
 
-//   const nonTechQuery = `
-//     SELECT 
-//       locationmaster.LocationName AS 'locationName',
-//       tbl_nontech_staff.StaffName AS 'user_type',
-//       DATE_FORMAT(DATE, '%Y-%m-%d') AS Date,
-//       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
-//       SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
-//       SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
-//       SUM(tbl_nontech_staff.Guard) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff
-//     INNER JOIN 
-//       locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
-//     WHERE
-//       locationmaster.LocationName IN ('${locationName.join("','")}') 
-//       AND tbl_nontech_staff.StaffName = '${username}' 
-//       AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
-//     GROUP BY 
-//       locationmaster.LocationName, 
-//       tbl_nontech_staff.StaffName,
-//       DATE
-//     ORDER BY 
-//       DATE ASC;
-//   `;
+  const nonTechQuery = `
+    SELECT 
+      LocationName AS 'locationName',
+      tbl_nontech_staff.StaffName AS 'user_type',
+      DATE_FORMAT(DATE, '%Y-%m-%d') AS Date,
+      SUM(tbl_nontech_staff.Counting) AS 'Counting', 
+      SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
+      SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
+      SUM(tbl_nontech_staff.Guard) AS 'Guard'
+    FROM 
+      tbl_nontech_staff
+    
+    WHERE
+      LocationName IN ('${locationName.join("','")}') 
+      AND tbl_nontech_staff.StaffName = '${username}' 
+      AND DATE(Date) BETWEEN '${startDate}' AND '${endDate}'
+    GROUP BY 
+      LocationName, 
+      tbl_nontech_staff.StaffName,
+      DATE
+    ORDER BY 
+      DATE ASC;
+  `;
 
   
-//     mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//       if (err) {
-//         console.error("Error fetching non-tech summary data:", err);
-//         res.status(500).json({ error: "Error fetching non-tech summary data" });
-//         return;
-//       }
+    mysql22.query(nonTechQuery, (err, nonTechResults) => {
+      if (err) {
+        console.error("Error fetching non-tech summary data:", err);
+        res.status(500).json({ error: "Error fetching non-tech summary data" });
+        return;
+      }
 
       
-//       res.json(nonTechResults);
-//     });
-// });
+      res.json(nonTechResults);
+    });
+});
 
-// app.get('/detailedreportcummulativecsvnontech', (req, res) => {
-//   let locationNames = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate;
+app.get('/detailedreportcummulativecsvnontech', (req, res) => {
+  let locationNames = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate;
 
-//   if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
-//       locationNames = null;
-//   } else {
-//       if (!Array.isArray(locationNames)) {
-//           locationNames = [locationNames];
-//       }
-//   }
+  if (!locationNames || (Array.isArray(locationNames) && locationNames.length === 0)) {
+      locationNames = null;
+  } else {
+      if (!Array.isArray(locationNames)) {
+          locationNames = [locationNames];
+      }
+  }
 
-//   let nonTechWhereClause = "";
-//   if (locationNames) {
-//       nonTechWhereClause = `WHERE lm.LocationName IN ('${locationNames.join("','")}')`;
-//   }
+  let nonTechWhereClause = "";
+  if (locationNames) {
+      nonTechWhereClause = `WHERE LocationName IN ('${locationNames.join("','")}')`;
+  }
 
-//   let nonTechDateClause = "";
-//   if (startDate && endDate) {
-//       nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//       nonTechDateClause += ` ns.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//   }
+  let nonTechDateClause = "";
+  if (startDate && endDate) {
+      nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+      nonTechDateClause += ` Date BETWEEN '${startDate}' AND '${endDate}'`;
+  }
 
-//   const nonTechQuery = `
-//     SELECT 
-//       lm.LocationName AS 'LocationName',
-//       COALESCE(SUM(ns.Counting), 0) AS 'Counting', 
-//       COALESCE(SUM(ns.Inventory), 0) AS 'Inventory',
-//       COALESCE(SUM(ns.DocPreparation), 0) AS 'DocPreparation',
-//       COALESCE(SUM(ns.Guard), 0) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff ns
-//     INNER JOIN 
-//       locationmaster lm ON ns.LocationID = lm.LocationID 
-//       ${nonTechWhereClause}
-//       ${nonTechDateClause}
-//     GROUP BY
-//       lm.LocationName`;
+  const nonTechQuery = `
+    SELECT 
+      LocationName AS 'LocationName',
+      COALESCE(SUM(Counting), 0) AS 'Counting', 
+      COALESCE(SUM(Inventory), 0) AS 'Inventory',
+      COALESCE(SUM(DocPreparation), 0) AS 'DocPreparation',
+      COALESCE(SUM(Guard), 0) AS 'Guard'
+    FROM 
+      tbl_nontech_staff ns
+      ${nonTechWhereClause}
+      ${nonTechDateClause}
+    GROUP BY
+      LocationName`;
 
-//   mysql22.query(nonTechQuery, (error, nonTechResult) => {
-//       if (error) {
-//           console.error("Error occurred when exporting CSV:", error);
-//           res.status(500).json({ error: "An error occurred while exporting the CSV file" });
-//           return;
-//       }
+  mysql22.query(nonTechQuery, (error, nonTechResult) => {
+      if (error) {
+          console.error("Error occurred when exporting CSV:", error);
+          res.status(500).json({ error: "An error occurred while exporting the CSV file" });
+          return;
+      }
 
-//       const nonTechData = nonTechResult && nonTechResult.length > 0 ? nonTechResult : [];
+      const nonTechData = nonTechResult && nonTechResult.length > 0 ? nonTechResult : [];
 
-//       if (nonTechData.length === 0) {
-//           res.status(404).json({ error: "No data found for the provided parameters" });
-//           return;
-//       }
+      if (nonTechData.length === 0) {
+          res.status(404).json({ error: "No data found for the provided parameters" });
+          return;
+      }
 
-//       res.setHeader("Content-Type", "text/csv");
-//       res.setHeader("Content-Disposition", "attachment;filename=All_location.csv");
-//       res.write("Sr. No.,Location,Counting,Inventory,DocPreparation,Guard\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment;filename=All_location.csv");
+      res.write("Sr. No.,Location,Counting,Inventory,DocPreparation,Guard\n");
 
-//       // Write CSV data
-//       nonTechData.forEach((row, index) => {
-//           res.write(`${index + 1},${row.LocationName},${row.Counting},${row.Inventory},${row.DocPreparation},${row.Guard}\n`);
-//       });
+      // Write CSV data
+      nonTechData.forEach((row, index) => {
+          res.write(`${index + 1},${row.LocationName},${row.Counting},${row.Inventory},${row.DocPreparation},${row.Guard}\n`);
+      });
 
-//       res.end();
-//   });
-// });
+      res.end();
+  });
+});
 
-// app.get("/alldetailedreportlocationwisecsvnontech", (req, res) => {
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+app.get("/alldetailedreportlocationwisecsvnontech", (req, res) => {
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
 
-//   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
-//     locationName = null;
-//   } else {
-//     if (!Array.isArray(locationName)) {
-//       locationName = [locationName];
-//     }
-//   }
+  if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+    locationName = null;
+  } else {
+    if (!Array.isArray(locationName)) {
+      locationName = [locationName];
+    }
+  }
 
-//   let nonTechWhereClause = "";
-//   if (locationName) {
-//     nonTechWhereClause = `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')`;
-//   }
+  let nonTechWhereClause = "";
+  if (locationName) {
+    nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
+  }
 
-//   let nonTechDateClause = "";
-//   if (startDate && endDate) {
-//     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//     nonTechDateClause += ` tbl_nontech_staff.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//   }
+  let nonTechDateClause = "";
+  if (startDate && endDate) {
+    nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+    nonTechDateClause += ` tbl_nontech_staff.Date BETWEEN '${startDate}' AND '${endDate}'`;
+  }
 
-//   const nonTechQuery = `
-//   SELECT 
-//     locationmaster.LocationName AS 'locationName',
-//     tbl_nontech_staff.StaffName AS 'user_type',
-//     SUM(tbl_nontech_staff.Counting) AS 'Counting', 
-//     SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
-//     SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
-//     SUM(tbl_nontech_staff.Guard) AS 'Guard'
-//   FROM 
-//     tbl_nontech_staff
-//   INNER JOIN 
-//     locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
-//   ${nonTechWhereClause}
-//   ${nonTechDateClause}
-//   GROUP BY 
-//     locationmaster.LocationName, 
-//     tbl_nontech_staff.StaffName;
-//   `;
+  const nonTechQuery = `
+  SELECT 
+    LocationName AS 'locationName',
+    tbl_nontech_staff.StaffName AS 'user_type',
+    SUM(tbl_nontech_staff.Counting) AS 'Counting', 
+    SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
+    SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
+    SUM(tbl_nontech_staff.Guard) AS 'Guard'
+  FROM 
+    tbl_nontech_staff
+  
+  ${nonTechWhereClause}
+  ${nonTechDateClause}
+  GROUP BY 
+    LocationName, 
+    tbl_nontech_staff.StaffName;
+  `;
 
-//   mysql22.query(nonTechQuery, (error, nonTechResults) => {
-//     if (error) {
-//       console.error("Error occurred when exporting CSV:", error);
-//       res.status(500).json({ error: "An error occurred while exporting the CSV file" });
-//       return;
-//     }
+  mysql22.query(nonTechQuery, (error, nonTechResults) => {
+    if (error) {
+      console.error("Error occurred when exporting CSV:", error);
+      res.status(500).json({ error: "An error occurred while exporting the CSV file" });
+      return;
+    }
 
-//     // Prepare a combined result set
-//     const combinedResults = nonTechResults.map((row, index) => ({
-//       srNo: index + 1,
-//       locationName: row.locationName,
-//       user_type: row.user_type,
-//       Counting: row.Counting || 0,
-//       Inventory: row.Inventory || 0,
-//       DocPreparation: row.DocPreparation || 0,
-//       Guard: row.Guard || 0
-//     }));
+    // Prepare a combined result set
+    const combinedResults = nonTechResults.map((row, index) => ({
+      srNo: index + 1,
+      locationName: row.locationName,
+      user_type: row.user_type,
+      Counting: row.Counting || 0,
+      Inventory: row.Inventory || 0,
+      DocPreparation: row.DocPreparation || 0,
+      Guard: row.Guard || 0
+    }));
 
-//     // Set response headers for CSV file
-//     res.setHeader("Content-Type", "text/csv");
-//     res.setHeader("Content-Disposition", `attachment;filename=All_location.csv`);
-//     res.write("Sr. No.,Location,UserName,Counting,Inventory,DocPreparation,Guard\n");
+    // Set response headers for CSV file
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment;filename=All_location.csv`);
+    res.write("Sr. No.,Location,UserName,Counting,Inventory,DocPreparation,Guard\n");
 
-//     // Write combined results to the response
-//     combinedResults.forEach(row => {
-//       res.write(`${row.srNo},${row.locationName},${row.user_type},${row.Counting},${row.Inventory},${row.DocPreparation},${row.Guard}\n`);
-//     });
+    // Write combined results to the response
+    combinedResults.forEach(row => {
+      res.write(`${row.srNo},${row.locationName},${row.user_type},${row.Counting},${row.Inventory},${row.DocPreparation},${row.Guard}\n`);
+    });
 
-//     // End response
-//     res.end();
-//   });
-// });
+    // End response
+    res.end();
+  });
+});
 
-// app.get("/alluserdetailedreportlocationwisecsv", (req, res, next) => {
-//   let username = req.query.username;
-//   let locationName = req.query.locationName;
-//   let startDate = req.query.startDate;
-//   let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
-//   console.log("Location Names:", locationName);
+app.get("/alluserdetailedreportlocationwisecsvnontech", (req, res, next) => {
+  let username = req.query.username;
+  let locationName = req.query.locationName;
+  let startDate = req.query.startDate;
+  let endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+  console.log("Location Names:", locationName);
 
-//   if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
-//     locationName = null;
-//   } else {
-//     if (!Array.isArray(locationName)) {
-//       locationName = [locationName];
-//     }
-//   }
+  if (!locationName || (Array.isArray(locationName) && locationName.length === 0)) {
+    locationName = null;
+  } else {
+    if (!Array.isArray(locationName)) {
+      locationName = [locationName];
+    }
+  }
 
-//   let nonTechWhereClause = "";
-//   if (locationName) {
-//     nonTechWhereClause = `WHERE locationmaster.LocationName IN ('${locationName.join("','")}')`;
-//   }
+  let nonTechWhereClause = "";
+  if (locationName) {
+    nonTechWhereClause = `WHERE LocationName IN ('${locationName.join("','")}')`;
+  }
 
-//   let nonTechDateClause = "";
-//   if (startDate && endDate) {
-//     nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
-//     nonTechDateClause += ` tbl_nontech_staff.Date BETWEEN '${startDate}' AND '${endDate}'`;
-//   }
+  let nonTechDateClause = "";
+  if (startDate && endDate) {
+    nonTechDateClause = nonTechWhereClause ? `AND` : `WHERE`;
+    nonTechDateClause += ` tbl_nontech_staff.Date BETWEEN '${startDate}' AND '${endDate}'`;
+  }
 
-//   const nonTechQuery = `
-//     SELECT 
-//       locationmaster.LocationName AS 'locationName',
-//       tbl_nontech_staff.StaffName AS 'user_type',
-//       DATE_FORMAT(tbl_nontech_staff.Date, '%Y-%m-%d') AS date,
-//       SUM(tbl_nontech_staff.Counting) AS 'Counting', 
-//       SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
-//       SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
-//       SUM(tbl_nontech_staff.Guard) AS 'Guard'
-//     FROM 
-//       tbl_nontech_staff
-//     INNER JOIN 
-//       locationmaster ON tbl_nontech_staff.LocationID = locationmaster.LocationID
-//     ${nonTechWhereClause}
-//     AND tbl_nontech_staff.StaffName = '${username}' 
-//     ${nonTechDateClause}
-//     GROUP BY 
-//       locationmaster.LocationName, 
-//       tbl_nontech_staff.StaffName,
-//       tbl_nontech_staff.Date
-//     ORDER BY 
-//       tbl_nontech_staff.Date ASC;
-//   `;
+  const nonTechQuery = `
+    SELECT 
+      LocationName AS 'locationName',
+      tbl_nontech_staff.StaffName AS 'user_type',
+      DATE_FORMAT(tbl_nontech_staff.Date, '%Y-%m-%d') AS date,
+      SUM(tbl_nontech_staff.Counting) AS 'Counting', 
+      SUM(tbl_nontech_staff.Inventory) AS 'Inventory',
+      SUM(tbl_nontech_staff.DocPreparation) AS 'DocPreparation',
+      SUM(tbl_nontech_staff.Guard) AS 'Guard'
+    FROM 
+      tbl_nontech_staff
+    
+    ${nonTechWhereClause}
+    AND tbl_nontech_staff.StaffName = '${username}' 
+    ${nonTechDateClause}
+    GROUP BY 
+      LocationName, 
+      tbl_nontech_staff.StaffName,
+      tbl_nontech_staff.Date
+    ORDER BY 
+      tbl_nontech_staff.Date ASC;
+  `;
 
-//   mysql22.query(nonTechQuery, (err, nonTechResults) => {
-//     if (err) {
-//       console.error("Error fetching non-tech summary data:", err);
-//       res.status(500).json({ error: "Error fetching non-tech summary data" });
-//       return;
-//     }
+  mysql22.query(nonTechQuery, (err, nonTechResults) => {
+    if (err) {
+      console.error("Error fetching non-tech summary data:", err);
+      res.status(500).json({ error: "Error fetching non-tech summary data" });
+      return;
+    }
 
-//     const combinedResults = nonTechResults.map((row, index) => ({
-//       srNo: index + 1,
-//       locationName: row.locationName,
-//       user_type: row.user_type,
-//       date: row.date,
-//       Counting: row.Counting,
-//       Inventory: row.Inventory,
-//       DocPreparation: row.DocPreparation,
-//       Guard: row.Guard
-//     }));
+    const combinedResults = nonTechResults.map((row, index) => ({
+      srNo: index + 1,
+      locationName: row.locationName,
+      user_type: row.user_type,
+      date: row.date,
+      Counting: row.Counting,
+      Inventory: row.Inventory,
+      DocPreparation: row.DocPreparation,
+      Guard: row.Guard
+    }));
 
-//     const fileName = 'All_location.csv';
+    const fileName = 'All_location.csv';
 
-//     res.setHeader("Content-Type", "text/csv");
-//     res.setHeader("Content-Disposition", `attachment;filename=${fileName}`);
-//     res.write('Sr. No.,Location Name,UserName,Date,Counting,Inventory,DocPreparation,Guard\n');
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment;filename=${fileName}`);
+    res.write('Sr. No.,Location Name,UserName,Date,Counting,Inventory,DocPreparation,Guard\n');
 
-//     combinedResults.forEach(row => {
-//       res.write(
-//         `${row.srNo},${row.locationName},${row.user_type},${row.date},${row.Counting},${row.Inventory},${row.DocPreparation},${row.Guard}\n`
-//       );
-//     });
+    combinedResults.forEach(row => {
+      res.write(
+        `${row.srNo},${row.locationName},${row.user_type},${row.date},${row.Counting},${row.Inventory},${row.DocPreparation},${row.Guard}\n`
+      );
+    });
 
-//     res.end();
-//   });
-// });
+    res.end();
+  });
+});
 
 //Telangana Non Tech Api
 
